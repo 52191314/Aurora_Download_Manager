@@ -159,9 +159,6 @@ app-release.aab
 AGENTS.md
 DESIGN.md
 ROADMAP.md
-/test/
-!/test/premium/
-!/test/premium/license/
 /tools/
 
 # Internal docs (agent maps, designs, sessions, freemium backlog)
