@@ -1,29 +1,29 @@
-# Mobile Downloader Browser
+# Aurora Download Manager
 
-[![CI](https://github.com/52191314/mobile-downloader-browser/actions/workflows/ci.yml/badge.svg)](https://github.com/52191314/mobile-downloader-browser/actions/workflows/ci.yml)
+[![CI](https://github.com/52191314/Aurora_Download_Manager/actions/workflows/ci.yml/badge.svg)](https://github.com/52191314/Aurora_Download_Manager/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%28API%2024%2B%29-green.svg)](https://developer.android.com)
 [![Flutter](https://img.shields.io/badge/Built%20with-Flutter-02569B.svg?logo=flutter)](https://flutter.dev)
 
-**Mobile Downloader Browser solves the friction of capturing and downloading media on Android.** It seamlessly transforms web browsing into background media capture with an integrated network sniffer, multi-threaded segmented HTTP engine, native HLS/DASH remuxing, and BitTorrent support — all wrapped in a sleek Nordic Glass UI.
+**Aurora Download Manager solves the friction of capturing and downloading media on Android.** It seamlessly transforms web browsing into background media capture with an integrated network sniffer, multi-threaded segmented HTTP engine, native HLS/DASH remuxing, and BitTorrent support — all wrapped in a sleek Nordic Glass UI.
 
-> ℹ️ **Branding Note**: This open-source repository and GitHub distribution is titled **Mobile Downloader Browser**. On the Google Play Store, the application retains its published store brand, **`Aurora: Browser & Downloader`**.
+> ℹ️ **Open-source edition**: this repository is the fully unlocked open-source build — every Pro & Ultra feature is enabled by default, with **no proprietary components** (no Play Billing, no Google Play Services, no license server). It is built and distributed from source for GitHub Releases / F-Droid / sideload. The freemium listing with one-time in-app purchases is distributed separately on the Google Play Store.
 
 ---
 
 ## ⚡ Quick Start (One Command)
 
-Test, analyze, and spin up Mobile Downloader Browser on your Android device or emulator with a single command:
+Test, analyze, and spin up Aurora Download Manager on your Android device or emulator with a single command:
 
 ```bash
-git clone https://github.com/52191314/mobile-downloader-browser.git && cd mobile-downloader-browser && flutter pub get && flutter test && flutter run
+git clone https://github.com/52191314/Aurora_Download_Manager.git && cd Aurora_Download_Manager && flutter pub get && flutter test && flutter run
 ```
 
 ---
 
 ## 🏗️ Architecture & Workflows
 
-Mobile Downloader Browser decouples media detection from downloading, running background isolation workers to prevent UI main-thread jank and handling complex protocols seamlessly.
+Aurora Download Manager decouples media detection from downloading, running background isolation workers to prevent UI main-thread jank and handling complex protocols seamlessly.
 
 ### Master Application Workflow
 
@@ -32,99 +32,86 @@ flowchart TD
     subgraph Launch ["1. App Launch & Bootstrapping"]
         A["App Start main()"] --> B["Initialize Native Bindings & System UI"]
         B --> C["Load SharedPreferences & Local DB Hive/Isar"]
-        C --> D["Detect Build Channel (Play Store vs GitHub)"]
-        D --> E["Evaluate License & Entitlement Tier (Free / Pro / Ultra)"]
-        E --> F{"First Launch / Onboarding?"}
-        F -- Yes --> G["Show Interactive App Tour"]
-        G --> H["Request System Permissions"]
-        F -- No --> H
-        H --> I["Start In-App Timers (Watcher, Auto-Backup); Automation API if enabled"]
-        I --> J["Render Core App Shell (AuroraDock)"]
+        C --> D["Resolve Entitlement Tier (Ultra default in OSS release builds)"]
+        D --> E{"First Launch / Onboarding?"}
+        E -- Yes --> F["Show Interactive App Tour"]
+        F --> G["Request System Permissions"]
+        E -- No --> G
+        G --> H["Start In-App Timers (Watcher, Auto-Backup); Automation API if enabled"]
+        H --> I["Render Core App Shell (AuroraDock)"]
     end
 
     subgraph Navigation ["2. Core Shell & Page Routing"]
-        J --> K["Queue Page (Tab 1)"]
-        J --> L["Web Browser & Sniffer (Tab 2)"]
-        J --> M["Overflow Menu / Popups"]
-        M --> N["FFmpeg Studio"]
-        M --> O["Secure Vault"]
-        M --> P["Aurora Watcher"]
-        M --> Q["Settings & Diagnostics"]
+        I --> J["Queue Page (Tab 1)"]
+        I --> K["Web Browser & Sniffer (Tab 2)"]
+        I --> L["Overflow Menu / Popups"]
+        L --> M["FFmpeg Studio"]
+        L --> N["Secure Vault"]
+        L --> O["Aurora Watcher"]
+        L --> P["Settings"]
     end
 
     subgraph Sniffer ["3. Browsing & Media Sniffing Engine"]
-        L --> R["InAppWebView Navigation"]
-        R --> S["AdBlock Engine Interception (FFI Rust)"]
-        R --> T["Media Capture Analyzer"]
-        T --> U{"Media Stream Detected?"}
-        U -- Yes --> V["Enrich Media Metadata & Parse Playlists"]
-        V --> W["Show Floating Sniffer Badge & Sheet"]
-        W --> X["User Selects Stream Quality / Format"]
-        X --> Y["Enqueue to Download Engine"]
+        K --> Q["InAppWebView Navigation"]
+        Q --> R["AdBlock Engine Interception (FFI Rust)"]
+        Q --> S["Media Capture Analyzer"]
+        S --> T{"Media Stream Detected?"}
+        T -- Yes --> U["Enrich Media Metadata & Parse Playlists"]
+        U --> V["Show Floating Sniffer Badge & Sheet"]
+        V --> W["User Selects Stream Quality / Format"]
+        W --> X["Enqueue to Download Engine"]
     end
 
     subgraph Downloader ["4. Multi-Protocol Download Engine"]
-        Y --> Z["DownloadQueue Task Dispatcher"]
-        Z --> AA{"Classify Protocol / Scheme"}
-        AA -- HTTP Direct --> AB["DownloadSplitter (Multi-segment Range Requests)"]
-        AA -- HLS / m3u8 --> AC["HlsDownloader (ts Segments + Key Decryption)"]
-        AA -- DASH / mpd --> AD["DashPlaylistParser (Video/Audio Muxing)"]
-        AA -- Torrent / Magnet --> AE["TorrentDownloader (Bencode + Peer Swarm)"]
+        X --> Y["DownloadQueue Task Dispatcher"]
+        Y --> Z{"Classify Protocol / Scheme"}
+        Z -- HTTP Direct --> AA["DownloadSplitter (Multi-segment Range Requests)"]
+        Z -- HLS / m3u8 --> AB["HlsDownloader (ts Segments + Key Decryption)"]
+        Z -- DASH / mpd --> AC["DashPlaylistParser (Video/Audio Muxing)"]
+        Z -- Torrent / Magnet --> AD["TorrentDownloader (Bencode + Peer Swarm)"]
 
-        AB --> AF["File Combiner & Speed Limiter"]
-        AC --> AF
-        AD --> AF
-        AE --> AF
+        AA --> AE["File Combiner & Speed Limiter"]
+        AB --> AE
+        AC --> AE
+        AD --> AE
 
-        AF --> AG{"Download State"}
-        AG -- In Progress --> AH["Update Foreground Notification & Speed Meter"]
-        AG -- Error / Expiry --> AI["DownloadErrorClassifier & Dead-Link Revival"]
-        AI --> Z
-        AG -- Completed --> AJ["Notify Completion & Trigger Post-Processing"]
+        AE --> AF{"Download State"}
+        AF -- In Progress --> AG["Update Foreground Notification & Speed Meter"]
+        AF -- Error / Expiry --> AH["DownloadErrorClassifier & Dead-Link Revival"]
+        AH --> Y
+        AF -- Completed --> AI["Notify Completion & Trigger Post-Processing"]
     end
 
     subgraph Processing ["5. Media Tools & Storage Vault"]
-        AJ --> AK{"Post-Download Action"}
-        AK -- Encryption --> AL["Move to Encrypted Vault (AES-256)"]
-        AK -- Edit / Transcode --> AM["FFmpeg Studio Module Check"]
-        AK -- Share / PC --> AN["LAN File Server (Send to PC)"]
-        AM --> AO["Execute Native FFmpeg Command"]
+        AI --> AJ{"Post-Download Action"}
+        AJ -- Encryption --> AK["Move to Encrypted Vault (AES-256)"]
+        AJ -- Edit / Transcode --> AL["FFmpeg Studio (included, no download)"]
+        AJ -- Share / PC --> AM["LAN File Server (Send to PC)"]
+        AL --> AN["Execute Native FFmpeg Command"]
     end
 ```
 
 <details>
 <summary><b>🔍 View Detailed Subsystem Diagrams (Bootstrapping, Sniffer, Multi-Protocol Engine, FFmpeg Studio & Vault)</b></summary>
 
-#### Bootstrapping & Tier Entitlement
+#### Bootstrapping & Entitlement (OSS edition)
 ```mermaid
 flowchart TD
     Start(["main() App Entry"]) --> InitFlutter["WidgetsFlutterBinding.ensureInitialized()"]
     InitFlutter --> LoadTheme["Load ThemeNotifier & Accent Pack"]
     LoadTheme --> InitDB["Initialize Local DB & Preferences Store"]
 
-    subgraph ChannelResolution ["Build Channel Resolution"]
-        InitDB --> ReadChannel["Read AURORA_BUILD_CHANNEL"]
-        ReadChannel --> IsPlay{"Channel is Play Store?"}
-        IsPlay -- Yes --> PlaySetup["Set Play Store Mode: Play Billing Active, Dynamic FFmpeg Module On-Demand"]
-        IsPlay -- No --> GithubSetup["Set GitHub Mode: Billing Disabled, Fat APK with FFmpeg Included"]
-    end
-
-    subgraph LicenseCheck ["Entitlement & License Evaluation"]
-        PlaySetup --> EvalTier["ProEntitlementStore.evaluateTier()"]
-        GithubSetup --> EvalTier
-        EvalTier --> LicenseServerCheck{"Check Aurora License Server / Play Purchase"}
-        LicenseServerCheck -- Valid License --> TierResult{"Resolved Tier"}
-        LicenseServerCheck -- No License / Free --> TierResult
-
-        TierResult -- Free --> FreeLimits["Apply Free Tier Caps: Capped max parallel downloads, Standard HTTP speed, Basic Sniffer"]
-        TierResult -- Pro --> ProUnlocks["Unlock Pro Features: Turbo Engine, AdBlock Native FFI, Dead-Link Revival, Encrypted Vault"]
-        TierResult -- Ultra --> UltraUnlocks["Unlock Ultra Features: FFmpeg Studio Suite, Aurora Watcher, Automation API, E2EE Vault Sync"]
+    subgraph Entitlement ["Entitlement (no billing, no license server)"]
+        InitDB --> ReadChannel["Read AURORA_BUILD_CHANNEL (default: github)"]
+        ReadChannel --> ResolveTier["ProEntitlement.tier (freshInstallTier)"]
+        ResolveTier --> ReleaseCheck{"kReleaseMode && github channel?"}
+        ReleaseCheck -- Yes --> Ultra["Ultra — every feature unlocked"]
+        ReleaseCheck -- No --> DebugTier["Debug/profile: purchase-derived tier (free by default)"]
     end
 
     subgraph OnboardingFlow ["First Launch Check"]
-        FreeLimits --> CheckFirstLaunch{"Onboarding Enabled AND First Launch?"}
-        ProUnlocks --> CheckFirstLaunch
-        UltraUnlocks --> CheckFirstLaunch
+        Ultra --> CheckFirstLaunch{"Onboarding Enabled AND First Launch?"}
+        DebugTier --> CheckFirstLaunch
 
         CheckFirstLaunch -- Yes --> TourPage["Launch Interactive App Tour"]
         TourPage --> RequestPermissions["Request Storage & Notification Permissions"]
@@ -205,12 +192,13 @@ flowchart TD
 
 ---
 
-## ✨ Why Mobile Downloader Browser?
+## ✨ Why Aurora Download Manager?
 
 - **Catch Media While Browsing** — Automatically hook DOM, `fetch`/`XHR`, media elements, and resource streams without manual copy-pasting.
 - **Survive Real-World CDNs** — Retains session cookies, Referer, custom User-Agents, and WebView-bound fetch routines for WAF/Cloudflare-protected hosts.
 - **Finish the Job Reliably** — Pause/resume, multi-chunk HTTP, HLS segment fetching + AES-128 decryption, TS→MP4 remuxing, foreground service protection, and auto-categorization.
 - **Modern Nordic UI** — Samsung-style browser chrome, tab groups, customizable capture tray, and dark/light Nordic Glass themes.
+- **Fully Unlocked** — The open-source build ships every Pro & Ultra feature (FFmpeg Studio, Watcher, Automation API, Encrypted Vault, E2EE vault sync) with nothing to buy.
 
 ---
 
@@ -227,36 +215,50 @@ flowchart TD
 
 ---
 
-## 📦 Build Channels & Distribution
+## 🔓 Open-Source Integrity
 
-Mobile Downloader Browser supports two distinct build configurations controlled by `--dart-define=AURORA_BUILD_CHANNEL`:
+This edition is deliberately kept free of proprietary components so it can be built and audited end-to-end:
 
-| Channel | `--dart-define` | App Branding & Distribution | Use Case & Capabilities |
-|---------|-----------------|-----------------------------|-------------------------|
-| **GitHub / Open Source** (Default) | `AURORA_BUILD_CHANNEL=github` | **Mobile Downloader Browser** | GitHub releases / F-Droid / Sideload builds. No billing client, fat APK with native engines included, full sniffer enabled. |
-| **Play Store** | `AURORA_BUILD_CHANNEL=play` | **Aurora: Browser & Downloader** | Google Play Store release with Play Billing one-time unlock and on-demand Play Feature Modules. |
+- **No Play Billing** — no `in_app_purchase`, no billing client, no purchase paths.
+- **No Google Play Services** — no `play-services-*`, no Firebase, no analytics/tracking SDKs.
+- **No license server** — the Play edition's server-verified entitlement system is absent; nothing phones home.
+- **No Play Feature Delivery** — no on-demand modules, no SplitCompat/SplitInstall; FFmpeg and all native engines ship inside the APK.
+- **All Pro & Ultra features unlocked** in release builds (see `ProEntitlement.freshInstallTier`).
+- Runtime plugin registration (`aurora_downloader/feature_delivery` → `registerPlugin`) is kept so the forked FFmpeg/media-kit plugins load on fat builds.
 
-### Build Commands
+---
+
+## 📦 Build & Distribution
+
+This repository ships the open-source (`github`) build channel. The `play` channel define exists in code only for fork compatibility — its proprietary dependencies were removed here, so a Play-channel build is **not** supported from this repo.
 
 ```bash
-# Debug build (fat APK, default GitHub channel)
-flutter build apk --debug --target-platform android-arm64
+# Debug build (fat APK, everything included)
+flutter build apk --debug
 
-# Release build for Play Store (AAB)
-flutter build appbundle --release --dart-define=AURORA_BUILD_CHANNEL=play
+# Release APK (signs with the debug keystore when android/key.properties is
+# absent — F-Droid re-signs with its own key when building from source)
+flutter build apk --release
+```
+
+Verify the build stays proprietary-free:
+
+```bash
+unzip -l build/app/outputs/flutter-apk/app-debug.apk \
+  | grep -iE "play-services|billing|feature-delivery|play-core"   # must be empty
 ```
 
 ---
 
 ## 🌟 Awesome Ecosystem & Community
 
-Mobile Downloader Browser is designed for developers and open-source enthusiasts. It fits into curated developer indices:
+Aurora Download Manager is designed for developers and open-source enthusiasts. It fits into curated developer indices:
 
 - 💙 **[Awesome Flutter](https://github.com/Solido/awesome-flutter)** — Open-source production Flutter applications.
 - 🤖 **[Awesome Android](https://github.com/JStumpp/awesome-android)** — Top open-source Android utilities and download managers.
 - 🔓 **[Awesome Open Source Apps](https://github.com/serhii-londar/open-source-mac-os-apps)** — Privacy-respecting mobile tools.
 
-Have a feedback idea or feature request? Join our community discussions on [GitHub Discussions](https://github.com/52191314/mobile-downloader-browser/discussions) or submit issues via the [Issue Tracker](https://github.com/52191314/mobile-downloader-browser/issues).
+Have a feedback idea or feature request? Join our community discussions on [GitHub Discussions](https://github.com/52191314/Aurora_Download_Manager/discussions) or submit issues via the [Issue Tracker](https://github.com/52191314/Aurora_Download_Manager/issues).
 
 ---
 
@@ -264,8 +266,8 @@ Have a feedback idea or feature request? Join our community discussions on [GitH
 
 We love contributions! Check out our detailed **[CONTRIBUTING.md](CONTRIBUTING.md)** guide to get started.
 
-- 🐛 **[Good First Issues](https://github.com/52191314/mobile-downloader-browser/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)** — Perfect for newcomers looking for quick, high-impact fixes.
-- 💡 **[Help Wanted](https://github.com/52191314/mobile-downloader-browser/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)** — Feature requests and sniffer enhancements seeking community pull requests.
+- 🐛 **[Good First Issues](https://github.com/52191314/Aurora_Download_Manager/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)** — Perfect for newcomers looking for quick, high-impact fixes.
+- 💡 **[Help Wanted](https://github.com/52191314/Aurora_Download_Manager/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)** — Feature requests and sniffer enhancements seeking community pull requests.
 
 ---
 
@@ -275,5 +277,4 @@ We love contributions! Check out our detailed **[CONTRIBUTING.md](CONTRIBUTING.m
 - **Android SDK**: Min API **24**, Compile API **36**, NDK **27.0.12077973**
 - **License**: [GNU General Public License v3.0](LICENSE)
 
-*Disclaimer: Mobile Downloader Browser is a general-purpose download and browsing tool. Users are responsible for complying with applicable laws and site terms of service.*
-
+*Disclaimer: Aurora Download Manager is a general-purpose download and browsing tool. Users are responsible for complying with applicable laws and site terms of service.*
