@@ -1,0 +1,20 @@
+Aurora Download Manager is an open-source Android browser and downloader that captures media while you browse. Streams, videos and files detected in the built-in browser are added to a background download queue with one tap.
+
+Download engine
+- Multi-threaded segmented HTTP with pause/resume, speed limiting, stall detection and auto-retry
+- HLS (m3u8) and DASH (mpd) parsing with AES-128 decryption and TS-to-MP4 remuxing
+- Native BitTorrent and magnet link support via libtorrent
+- Session cookies, Referer and custom User-Agents retained for WAF/Cloudflare-protected hosts
+- Foreground service keeps downloads alive; dead links are revived by headless re-sniffing
+
+Built-in browser
+- Multi-tab browsing with tab groups and User-Agent switching
+- Hybrid adblock engine (native C++ domain trie + Aho-Corasick)
+- Media capture tray with metadata enrichment and format/quality selection
+
+Media tools
+- FFmpeg Studio for editing, transcoding and extracting audio
+- Encrypted vault with AES-256 and biometric unlock, plus E2EE vault sync
+- Aurora Watcher, Automation API, per-site profiles and scheduled downloads
+
+This build is the fully unlocked open-source edition: every feature is enabled by default and there are no proprietary components, no trackers and no ads. Released under the GNU General Public License v3.0.

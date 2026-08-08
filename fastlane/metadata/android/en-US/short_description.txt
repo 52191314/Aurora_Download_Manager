@@ -1,0 +1,1 @@
+Browser + media sniffer; downloads via HTTP, HLS/DASH and torrent

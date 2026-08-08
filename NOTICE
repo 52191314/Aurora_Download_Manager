@@ -1,0 +1,23 @@
+Aurora Download Manager — third-party native components
+
+This project builds entirely from FLOSS components. The native libraries that
+ship inside the APK and their licenses:
+
+- libtorrent_flutter 1.9.2 (GPL-3.0) — BitTorrent engine. The 16 KB page-size
+  aligned prebuilt used by the release build is vendored under
+  tooling/torrent_16k/ (stamped with the source package version in
+  tooling/torrent_16k/VERSION). Build with
+  -PlibtorrentFlutterSkipDownload=true so the vendored prebuilt is used
+  instead of the plugin's download/CMake fallback.
+- ffmpeg-kit-min-gpl (GPL-3.0, with FFmpeg's LGPL components) — media
+  transcoding. Resolved from Maven Central (com.antonkarpenko) at build time;
+  the local fork packages/ffmpeg_kit_flutter_new_min_gpl carries its own
+  LICENSE file.
+- media_kit native libs (media_kit_libs_android_video, vendored fork under
+  packages/ with its own LICENSE file) — libmpv based video playback.
+- libaurora_adblock — this project's own native C++ adblock engine (domain
+  trie + Aho-Corasick), built from source in this repository.
+
+All other dependencies are Dart/Flutter packages declared in pubspec.yaml and
+resolved from pub.dev at build time. The app itself is GPL-3.0-only; see the
+top-level LICENSE file.
