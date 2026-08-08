@@ -1,6 +1,5 @@
 # Aurora Download Manager
 
-[![CI](https://github.com/52191314/Aurora_Download_Manager/actions/workflows/ci.yml/badge.svg)](https://github.com/52191314/Aurora_Download_Manager/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%28API%2024%2B%29-green.svg)](https://developer.android.com)
 [![Flutter](https://img.shields.io/badge/Built%20with-Flutter-02569B.svg?logo=flutter)](https://flutter.dev)
