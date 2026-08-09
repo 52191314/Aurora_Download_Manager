@@ -1,0 +1,9 @@
+# Static donation landing site — served as a Workers static-assets project.
+# No Worker script: the website/ folder is the whole deployment.
+# Deployed via Cloudflare Workers & Pages (Git integration), deploy command:
+#   npx wrangler deploy
+name = "aurora-download-manager"
+compatibility_date = "2026-01-01"
+
+[assets]
+directory = "./website"
