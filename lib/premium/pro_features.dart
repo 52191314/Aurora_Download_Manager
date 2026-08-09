@@ -17,7 +17,6 @@
 /// | Tab groups | 3 | unlimited | unlimited |
 /// | Auto-host on groups | no | yes | yes |
 /// | Cosmetic rules | 25 | unlimited | unlimited |
-/// | ~~Drive sync~~ | — | — | — | **feature removed; see [ProFeature.driveSync]** |
 /// | Scheduled auto-backup | no | yes | yes |
 /// | Manual backup/export | yes | yes | yes |
 /// | Proxy (HTTP+SOCKS5+auth) | no | yes | yes |
@@ -51,16 +50,6 @@ enum ProFeature {
 
   /// Download rules & automation (auto-rename, route by host/type, etc.).
   downloadRules,
-
-  /// Google Drive connection + auto-sync.
-  ///
-  /// **Feature removed 2026-07-27** — the Drive implementation and its four
-  /// packages were deleted (see `play_review_audit_2026-07-27.md` §0.1). This
-  /// enum entry, its [ProFeatures.minimumTier] mapping, and its display name are
-  /// retained only because the enum's append order is frozen for analytics and
-  /// error strings. Nothing constructs or queries it. Do not treat a `true` from
-  /// [ProFeatures.allows] here as meaning Drive sync exists.
-  driveSync,
 
   /// More than [freeFilterListSlots] enabled remote filter lists.
   extraFilterLists,
@@ -178,26 +167,6 @@ enum ProFeature {
 
 // Static helper: feature gate matrix + tier-aware caps.
 class ProFeatures {
-  /// Daily Drive upload file cap for Free tier.
-  static const int driveSyncDailyLimitFree = 15;
-
-  /// Daily Drive upload file cap for Pro tier.
-  static const int driveSyncDailyLimitPro = 50;
-
-  /// Daily Drive upload file cap for Ultra tier.
-  static const int driveSyncDailyLimitUltra = 1000;
-
-  /// Gets daily Google Drive upload cap for a given tier.
-  static int driveSyncDailyLimit(EntitlementTier tier) {
-    switch (tier) {
-      case EntitlementTier.free:
-        return driveSyncDailyLimitFree;
-      case EntitlementTier.pro:
-        return driveSyncDailyLimitPro;
-      case EntitlementTier.ultra:
-        return driveSyncDailyLimitUltra;
-    }
-  }
   ProFeatures._();
 
   // -- Download limits (tier-aware) --
@@ -287,7 +256,6 @@ class ProFeatures {
     ProFeature.autoHostGroups: EntitlementTier.pro,
     ProFeature.customFilterListUrl: EntitlementTier.pro,
     ProFeature.downloadRules: EntitlementTier.pro,
-    ProFeature.driveSync: EntitlementTier.pro,
     ProFeature.extraFilterLists: EntitlementTier.pro,
     ProFeature.higherConcurrency: EntitlementTier.pro,
     ProFeature.higherChunks: EntitlementTier.pro,
@@ -352,8 +320,6 @@ class ProFeatures {
         return 'Auto-host tab groups';
       case ProFeature.unlimitedCosmeticRules:
         return 'Unlimited cosmetic rules';
-      case ProFeature.driveSync:
-        return 'Google Drive sync';
       case ProFeature.scheduledAutoBackup:
         return 'Scheduled auto-backup';
       case ProFeature.proxy:
