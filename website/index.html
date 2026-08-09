@@ -319,7 +319,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: flex-start;
     transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   }
 
@@ -332,16 +332,6 @@
   .card-featured {
     border-color: rgba(56, 225, 200, 0.25);
     background: linear-gradient(180deg, rgba(25, 38, 58, 0.85) 0%, rgba(12, 19, 30, 0.95) 100%);
-  }
-
-  .card-featured::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: var(--grad-primary);
   }
 
   .card-header {
@@ -459,8 +449,8 @@
   }
 
   .binance-qr-img {
-    width: 210px;
-    height: 210px;
+    width: 170px;
+    height: 170px;
     border-radius: 16px;
     border: 2px solid rgba(240, 185, 11, 0.4);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
@@ -573,8 +563,8 @@
   }
 
   .qr-image-container img {
-    width: 180px;
-    height: 180px;
+    width: 160px;
+    height: 160px;
     display: block;
   }
 
@@ -647,7 +637,7 @@
   .comparison-table th {
     font-family: 'Outfit', sans-serif;
     font-weight: 700;
-    color: var(--text-sub);
+    color: var(--text);
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -658,7 +648,7 @@
   }
 
   .check-icon { color: var(--accent-cyan); font-weight: bold; }
-  .cross-icon { color: #f43f5e; opacity: 0.7; }
+  .cross-icon { color: #f87171; opacity: 0.9; }
 
   /* Toast Notification */
   .toast {
@@ -705,7 +695,7 @@
   }
 
   .footer-link {
-    color: var(--text-sub);
+    color: var(--text);
     text-decoration: none;
     transition: color 0.2s ease;
   }
@@ -760,11 +750,15 @@
       color: var(--text);
     }
     .comparison-table td:nth-child(2) { color: var(--accent-cyan); }
-    .comparison-table td:nth-child(3) { color: #f43f5e; opacity: 0.85; }
+    .comparison-table td:nth-child(3) { color: #f87171; opacity: 0.95; }
 
     /* Keep QR codes compact so cards don't dominate the viewport. */
-    .binance-qr-img { width: 55%; max-width: 180px; height: auto; }
-    .qr-image-container img { width: 150px; height: 150px; max-width: 100%; }
+    .binance-qr-img { width: 160px; height: 160px; max-width: 100%; }
+    .qr-image-container img { width: 160px; height: 160px; max-width: 100%; }
+
+    /* Tighter vertical rhythm on small screens. */
+    .hero h1 { line-height: 1.3; }
+    .card-desc { margin-bottom: 12px; }
   }
 </style>
 </head>
