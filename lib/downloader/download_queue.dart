@@ -148,14 +148,25 @@ class DownloadQueue {
   /// Per-task progress notifiers (P1b): the queue page drives each card's
   /// live progress area with these instead of rebuilding the whole list on
   /// every tick. Created lazily on first emit; disposed on removal/close.
-  final Map<String, ValueNotifier<DownloadTask>> _taskNotifiers = {};
+  /// A plain [ValueNotifier] would swallow same-instance assignments (the
+  /// queue and engines mutate one DownloadTask object in place), so this is
+  /// a push-style notifier that fires unconditionally.
+  final Map<String, _TaskLiveNotifier> _taskNotifiers = {};
+
+  /// Last value-snapshot fired to each per-task notifier (P1b). The queue
+  /// and the download engines mutate the SAME [DownloadTask] instance in
+  /// place, so the notifier guard must compare against a stored snapshot of
+  /// the rendered fields — comparing `notifier.value` against `task`
+  /// directly would always be equal (same object) and the live card would
+  /// never update past its initial values.
+  final Map<String, _TaskRenderSnapshot> _lastTaskSnapshot = {};
 
   /// Bumped on every task emit. The queue page's header (aggregate speed /
   /// counts) listens to this instead of rebuilding the whole list per tick.
   final ValueNotifier<int> queueVersion = ValueNotifier<int>(0);
 
   /// Live per-task notifier, or null until the task first emits.
-  ValueNotifier<DownloadTask>? taskNotifierFor(String taskId) =>
+  ValueListenable<DownloadTask>? taskNotifierFor(String taskId) =>
       _taskNotifiers[taskId];
 
   /// Set once [close] runs; stops [queueVersion] bumps after disposal.
@@ -163,6 +174,7 @@ class DownloadQueue {
 
   void _disposeTaskNotifier(String taskId) {
     _taskNotifiers.remove(taskId)?.dispose();
+    _lastTaskSnapshot.remove(taskId);
   }
   final StreamController<String> _warningController =
       StreamController<String>.broadcast();
@@ -1933,6 +1945,7 @@ class DownloadQueue {
       notifier.dispose();
     }
     _taskNotifiers.clear();
+    _lastTaskSnapshot.clear();
     queueVersion.dispose();
     if (!_taskUpdateController.isClosed) {
       await _taskUpdateController.close();
@@ -1993,18 +2006,20 @@ class DownloadQueue {
       _taskUpdateController.add(task);
     }
     // P1b: per-task notifier for live card UI. Skip no-op notifications
-    // (pure ticks where nothing the card renders changed).
+    // (pure ticks where nothing the card renders changed). The task object
+    // is mutated in place by the queue and engines, so the no-op check must
+    // compare a stored value snapshot — never `notifier.value` against
+    // `task` (same object, always equal, notifier never fires).
     final notifier = _taskNotifiers[task.id];
     if (notifier != null) {
-      final prev = notifier.value;
-      if (prev.downloadedBytes != task.downloadedBytes ||
-          prev.speed != task.speed ||
-          prev.state != task.state ||
-          prev.statusMessage != task.statusMessage) {
-        notifier.value = task;
+      final snapshot = _TaskRenderSnapshot(task);
+      if (_lastTaskSnapshot[task.id] != snapshot) {
+        _lastTaskSnapshot[task.id] = snapshot;
+        notifier.push(task);
       }
     } else {
-      _taskNotifiers[task.id] = ValueNotifier<DownloadTask>(task);
+      _taskNotifiers[task.id] = _TaskLiveNotifier(task);
+      _lastTaskSnapshot[task.id] = _TaskRenderSnapshot(task);
     }
     if (!_notifiersClosed) {
       queueVersion.value++;
@@ -2253,5 +2268,84 @@ class DownloadQueue {
       return false;
     }
     return false;
+  }
+}
+
+/// Value snapshot of the fields [DownloadTaskCard] renders from the live
+/// per-task notifier. The queue and engines mutate the task in place, so
+/// this snapshot — not the task object — is what the no-op guard compares.
+class _TaskRenderSnapshot {
+  final int downloadedBytes;
+  final int totalBytes;
+  final int totalParts;
+  final int completedParts;
+  final int chunkCount;
+  final double speed;
+  final DownloadState state;
+  final String? statusMessage;
+  final String? errorMessage;
+  final DownloadFailure? failureReason;
+
+  _TaskRenderSnapshot(DownloadTask task)
+      : downloadedBytes = task.downloadedBytes,
+        totalBytes = task.totalBytes,
+        totalParts = task.totalParts,
+        completedParts = task.completedParts,
+        chunkCount = task.chunks.length,
+        speed = task.speed,
+        state = task.state,
+        statusMessage = task.statusMessage,
+        errorMessage = task.errorMessage,
+        failureReason = task.failureReason;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _TaskRenderSnapshot &&
+      other.downloadedBytes == downloadedBytes &&
+      other.totalBytes == totalBytes &&
+      other.totalParts == totalParts &&
+      other.completedParts == completedParts &&
+      other.chunkCount == chunkCount &&
+      other.speed == speed &&
+      other.state == state &&
+      other.statusMessage == statusMessage &&
+      other.errorMessage == errorMessage &&
+      other.failureReason == failureReason;
+
+  @override
+  int get hashCode => Object.hash(
+        downloadedBytes,
+        totalBytes,
+        totalParts,
+        completedParts,
+        chunkCount,
+        speed,
+        state,
+        statusMessage,
+        errorMessage,
+        failureReason,
+      );
+}
+
+/// Push-style per-task notifier (P1b). [ValueNotifier] suppresses
+/// notifications when the assigned value is `==` to the current one — and
+/// since the queue and engines mutate ONE [DownloadTask] instance in place,
+/// assigning that same instance would never notify. This notifier fires
+/// unconditionally on [push]; the card reads [value] (the current, already
+/// mutated task) on every rebuild.
+class _TaskLiveNotifier extends ChangeNotifier
+    implements ValueListenable<DownloadTask> {
+  DownloadTask _task;
+
+  _TaskLiveNotifier(this._task);
+
+  @override
+  DownloadTask get value => _task;
+
+  /// Records the current task reference and notifies listeners regardless
+  /// of whether the instance changed (it usually didn't — it was mutated).
+  void push(DownloadTask task) {
+    _task = task;
+    notifyListeners();
   }
 }
