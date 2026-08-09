@@ -1,0 +1,3 @@
+# Cloudflare Pages rewrites: /donation serves the same page as /
+/donation / 200
+/donation/ / 200

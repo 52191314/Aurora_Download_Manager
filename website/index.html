@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurora Download Manager — Support Development</title>
+<meta name="description" content="Aurora Download Manager is free, open-source download manager for Android. No ads, no tracking, no paywalls. Support development with a voluntary donation.">
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #111922;
+    --panel-2: #16212c;
+    --text: #e8eef5;
+    --muted: #93a4b8;
+    --accent: #38e1c8;
+    --accent-2: #4f8ef7;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: radial-gradient(1200px 600px at 80% -10%, #12303a 0%, transparent 60%),
+                radial-gradient(900px 500px at 10% 110%, #10203a 0%, transparent 55%),
+                var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 56px 24px 80px; }
+  .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+  .logo-mark {
+    width: 44px; height: 44px; border-radius: 12px; flex: none;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 20px; color: #06121a;
+  }
+  .logo-name { font-weight: 700; font-size: 18px; letter-spacing: .2px; }
+  .logo-sub { color: var(--muted); font-size: 13px; }
+  h1 { font-size: 30px; line-height: 1.25; margin: 8px 0 14px; font-weight: 800; }
+  h1 .grad { background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { color: var(--muted); font-size: 16.5px; max-width: 60ch; margin-bottom: 34px; }
+  .card {
+    background: var(--panel); border: 1px solid #22303f; border-radius: 16px;
+    padding: 26px; margin-bottom: 18px;
+  }
+  .card h2 { font-size: 17px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .card p { color: var(--muted); font-size: 14.5px; margin-bottom: 18px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .badge {
+    font-size: 12px; color: var(--accent); background: rgba(56,225,200,.08);
+    border: 1px solid rgba(56,225,200,.25); padding: 4px 10px; border-radius: 999px;
+  }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+    font-weight: 600; font-size: 15px; padding: 12px 22px; border-radius: 12px;
+    border: 1px solid transparent; transition: transform .05s ease, box-shadow .15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #06121a; box-shadow: 0 6px 22px rgba(56,225,200,.25); }
+  .btn-ghost { background: var(--panel-2); color: var(--text); border-color: #2b3b4d; }
+  .btn-ghost:hover { border-color: var(--accent); }
+  .note { color: var(--muted); font-size: 13px; margin-top: 16px; }
+  .fine {
+    margin-top: 40px; color: #64788f; font-size: 12.5px; text-align: center;
+  }
+  .fine a { color: var(--muted); text-decoration: none; }
+  .fine a:hover { color: var(--accent); }
+  .fine .sep { margin: 0 8px; opacity: .5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">
+    <div class="logo-mark">A</div>
+    <div>
+      <div class="logo-name">Aurora Download Manager</div>
+      <div class="logo-sub">Free &amp; open source · Android</div>
+    </div>
+  </div>
+
+  <h1>Keep Aurora <span class="grad">free</span> for everyone</h1>
+  <p class="lead">
+    Aurora Download Manager is developed in the open and released free of charge —
+    no ads, no tracking, no paywalls, no locked features. Every build from the
+    Google Play Store and F-Droid is fully unlocked. Donations are entirely
+    voluntary; they help cover hosting, infrastructure and development time.
+  </p>
+
+  <div class="card">
+    <h2>💚 Donate</h2>
+    <p>Choose whatever works for you. One-time or recurring, every bit helps.</p>
+    <div class="btn-row">
+      <!-- TODO: replace placeholders with real handles -->
+      <a class="btn btn-primary" href="https://www.paypal.me/your-handle" target="_blank" rel="noopener">PayPal</a>
+      <a class="btn btn-ghost" href="https://ko-fi.com/your-username" target="_blank" rel="noopener">Ko-fi</a>
+      <a class="btn btn-ghost" href="https://www.buymeacoffee.com/your-username" target="_blank" rel="noopener">Buy Me a Coffee</a>
+    </div>
+    <div class="note">
+      Crypto accepted too — USDT (TRC-20): <code>TODO_YOUR_TRON_ADDRESS</code>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🔓 Everything is already free</h2>
+    <p>
+      There is no paid tier and nothing to unlock. The Play Store and F-Droid
+      versions are identical in features. If you cannot donate, that is fine —
+      star the repo, report a bug, translate a string, or just keep using the app.
+    </p>
+    <div class="badges">
+      <span class="badge">No ads</span>
+      <span class="badge">No tracking</span>
+      <span class="badge">No paywalls</span>
+      <span class="badge">Fully open source</span>
+    </div>
+  </div>
+
+  <div class="fine">
+    <a href="https://github.com/52191314/Aurora_Download_Manager" target="_blank" rel="noopener">GitHub</a>
+    <span class="sep">·</span>
+    <a href="https://f-droid.org/" target="_blank" rel="noopener">F-Droid</a>
+    <span class="sep">·</span>
+    <span>Aurora Download Manager · GPL-3.0</span>
+  </div>
+</div>
+</body>
+</html>
