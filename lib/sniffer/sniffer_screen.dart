@@ -316,6 +316,11 @@ class _SnifferScreenState extends State<SnifferScreen>
   /// share intents, etc.) that arrived before tab restore finished.
   /// List (not a single slot) so concurrent opens are not dropped.
   final List<String> _pendingOpenUrlsAfterTabsLoaded = [];
+
+  /// Imported-session URLs waiting for tab restore to finish (backup import
+  /// live-restore; flushed in [markTabsLoaded] as new tabs, not navigations).
+  final List<String> _pendingImportTabUrls = [];
+
   static const Duration _strictRedirectPromptCooldown = Duration(seconds: 8);
   final Set<String> _activeStrictRedirectPrompts = {};
 
@@ -435,6 +440,7 @@ class _SnifferScreenState extends State<SnifferScreen>
     );
     widget.controller?.setOnOpenUrlRequest(_handleExternalOpenUrl);
     widget.controller?.setOnOpenUrlInNewTab(_handleExternalOpenUrl);
+    widget.controller?.setOnOpenUrlsInNewTabs(_handleOpenUrlsInNewTabs);
     widget.openRequestBus?.addListener(_onOpenRequestBus);
     // Consume any request published before SnifferScreen mounted.
     _onOpenRequestBus();
@@ -1017,6 +1023,15 @@ class _SnifferScreenState extends State<SnifferScreen>
           }
         });
       }
+      // Imported-session tabs open as NEW tabs beside the current one.
+      final importPending = List<String>.from(_pendingImportTabUrls);
+      _pendingImportTabUrls.clear();
+      if (importPending.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _openTabsAfterActive(importPending);
+        });
+      }
       // Also drain the bus in case a request arrived while restoring tabs.
       _onOpenRequestBus();
     }
@@ -1053,6 +1068,36 @@ class _SnifferScreenState extends State<SnifferScreen>
       return;
     }
     _navigateActiveTabToExternalUrl(trimmed);
+  }
+
+  /// Backup-import live restore: open [urls] as new tabs immediately to the
+  /// right of the current tab, without switching to them.
+  void _handleOpenUrlsInNewTabs(List<String> urls) {
+    final trimmed = urls.map((u) => u.trim()).where((u) => u.isNotEmpty).toList();
+    if (trimmed.isEmpty) return;
+    debugPrint('_handleOpenUrlsInNewTabs(${trimmed.length}) '
+      'tabsLoaded=$_tabsLoaded tabs=${_tabs.length}');
+    if (!_tabsLoaded || _tabs.isEmpty) {
+      _pendingImportTabUrls.addAll(trimmed);
+      return;
+    }
+    _openTabsAfterActive(trimmed);
+  }
+
+  /// Inserts each URL as a new background tab right after the active one,
+  /// preserving order. Each insert lands at the same relative position.
+  void _openTabsAfterActive(List<String> urls) {
+    if (!mounted || _tabs.isEmpty || urls.isEmpty) return;
+    var insertAt = _activeTabIndex + 1;
+    for (final url in urls) {
+      _tabLifecycleController.openNewTab(
+        url: url,
+        switchToTab: false,
+        insertAtIndex: insertAt,
+      );
+      insertAt++;
+    }
+    if (mounted) setState(() {});
   }
 
   /// Load [url] in the **current active browser tab** (not a brand-new tab).
@@ -1230,6 +1275,7 @@ class _SnifferScreenState extends State<SnifferScreen>
     }
     widget.controller?.setOnOpenUrlRequest(null);
     widget.controller?.setOnOpenUrlInNewTab(null);
+    widget.controller?.setOnOpenUrlsInNewTabs(null);
     widget.openRequestBus?.removeListener(_onOpenRequestBus);
     _tabManager.dispose();
     super.dispose();
