@@ -32,7 +32,7 @@ AuthorEmail: xianspired@gmail.com
 SourceCode: https://github.com/52191314/Aurora_Download_Manager
 IssueTracker: https://github.com/52191314/Aurora_Download_Manager/issues
 Donate: https://ahjie521.store/donation
-AutoName: Aurora Download Manager
+AutoName: Aurora Downloader
 
 RepoType: git
 Repo: https://github.com/52191314/Aurora_Download_Manager.git

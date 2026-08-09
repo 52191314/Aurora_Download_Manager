@@ -193,3 +193,4 @@ opencode.jsonc
 .dev.vars*
 !.dev.vars.example
 ios/Flutter/ephemeral/
+tooling/torrent_16k/
