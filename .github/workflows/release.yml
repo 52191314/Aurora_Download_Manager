@@ -77,8 +77,9 @@ jobs:
         run: |
           git clone -q --depth 1 --branch v0.3.0 \
             https://github.com/obfusk/reproducible-apk-tools.git /tmp/reproducible-apk-tools
+          mv build/app/outputs/flutter-apk/app-release.apk unaligned.apk
           python3 /tmp/reproducible-apk-tools/zipalign.py --page-size 16 --pad-like-apksigner \
-            --replace build/app/outputs/flutter-apk/app-release.apk
+            --replace unaligned.apk build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload APK to release
         env:
