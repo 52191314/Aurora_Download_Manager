@@ -73,15 +73,15 @@ class DonateSheet extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.favorite_rounded, color: Colors.redAccent),
-              title: const Text('Patreon'),
-              subtitle: const Text(DonationLinks.patreon),
+              title: const Text('Donation page'),
+              subtitle: const Text(DonationLinks.website),
               trailing: const Icon(Icons.open_in_new_rounded, size: 18),
               onTap: () {
                 final open = openUrl;
                 if (open != null) {
-                  open(DonationLinks.patreon);
+                  open(DonationLinks.website);
                 } else {
-                  _copy(context, DonationLinks.patreon, 'Patreon link');
+                  _copy(context, DonationLinks.website, 'Donation link');
                 }
               },
             ),

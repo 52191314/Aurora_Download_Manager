@@ -6,6 +6,8 @@ import 'package:path_provider/path_provider.dart';
 
 /// Donation links for the OSS edition (shown in-app and on the F-Droid listing).
 class DonationLinks {
+  /// Canonical donation landing page (Patreon + USDT listed there).
+  static const String website = 'https://ahjie521.store/donation';
   static const String patreon = 'https://www.patreon.com/c/Ahjie521';
   static const String usdtLabel = 'USDT (BEP20 / BSC)';
   static const String usdtBep20 = '0xd08d47bde441888166b801616754c667672cd502';
