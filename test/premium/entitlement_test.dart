@@ -103,7 +103,6 @@ void main() {
         ProFeature.autoHostGroups,
         ProFeature.customFilterListUrl,
         ProFeature.downloadRules,
-        ProFeature.driveSync,
         ProFeature.extraFilterLists,
         ProFeature.higherConcurrency,
         ProFeature.higherChunks,
