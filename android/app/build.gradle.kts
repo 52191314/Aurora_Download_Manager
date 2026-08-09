@@ -39,6 +39,12 @@ android {
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
+    // F-Droid: AGP 8+ adds a "Dependency metadata" APK signing block
+    // (0x504B4453) by default; the F-Droid scanner flags it as an error.
+    dependenciesInfo {
+        includeInApk = false
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
