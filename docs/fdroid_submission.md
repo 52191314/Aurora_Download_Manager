@@ -31,7 +31,7 @@ AuthorName: Mengsean Cheang
 AuthorEmail: xianspired@gmail.com
 SourceCode: https://github.com/52191314/Aurora_Download_Manager
 IssueTracker: https://github.com/52191314/Aurora_Download_Manager/issues
-Donate: https://www.patreon.com/c/Ahjie521
+Donate: https://ahjie521.store/donation
 AutoName: Aurora Download Manager
 
 RepoType: git
@@ -40,7 +40,7 @@ Repo: https://github.com/52191314/Aurora_Download_Manager.git
 Builds:
   - versionName: 1.0.1
     versionCode: 54
-    commit: 59ae558c4d0e505fc1f14dca4068ab7eca3f61d6
+    commit: dc72c0a722c3e964751f6352ccca2596a35ed1ec
     srclibs:
       - flutter@stable
     output: build/app/outputs/flutter-apk/app-release.apk
@@ -66,14 +66,22 @@ CurrentVersionCode: 54
 ```
 
 Notes for reviewers / known points:
+- The build commit is the current OSS HEAD: it includes the in-app donation
+  section (Settings → Support development → donation page opens the system
+  browser via ACTION_VIEW), the backup restore of browser tabs live beside
+  the current tab, and the website donation page. Everything the fastlane
+  listing advertises is in this build.
 - Flutter is provided via the `flutter@stable` srclib (no submodule); the app
   requires Dart `^3.8.1`, which stable Flutter satisfies. If a future stable
   Flutter's Gradle plugin demands Gradle > 8.12, bump
   `android/gradle/wrapper/gradle-wrapper.properties` to 8.14 (planned).
-- libtorrent comes from the `libtorrent_flutter` pub package, whose prebuilt
-  .so ships inside the package (no external download). The 16 KB-aligned
-  copies in `tooling/torrent_16k/` are only for the Play AAB build; F-Droid
-  does not need them, but they are tracked in-repo with a NOTICE.
+- libtorrent comes from the `libtorrent_flutter` pub package (v1.9.1). Its
+  Gradle plugin downloads prebuilt `.so` files from the plugin's GitHub
+  releases during the build; if that download fails it falls back to a
+  CMake-from-source build of libtorrent + boost (slow but self-contained).
+  The 16 KB-aligned copies in `tooling/torrent_16k/` are vendored for the
+  Play AAB build only and are tracked with a NOTICE; F-Droid does not need
+  them. NOTICE documents all vendored/prebuilt native components.
 - ffmpeg-kit-min-gpl (GPL) and media_kit libs are resolved from Maven Central
   / the tracked forks; NOTICE documents their licenses.
 - The release APK is debug-signed (no keystore in the repo) — F-Droid
