@@ -1,9 +1,12 @@
 # Flutter Wrapper — keep all io.flutter.** EXCEPT:
 #   - PlayStoreDeferredComponentManager (references com.google.android.play.core.*)
+#   - FlutterPlayStoreSplitApplication (extends SplitCompatApplication — keeps the
+#     whole com.google.android.play.core.* subtree alive)
 #   - GoogleSignInPlugin (references com.google.android.gms.*)
-# Both are bundled in Flutter's engine AAR but never used in this OSS edition.
+# All are bundled in Flutter's engine AAR but never used in this OSS edition
+# (the manifest application is .AuroraApplication, not the split-store one).
 # The negation (!) lets R8 strip them so F-Droid's scanner finds no non-free classes.
--keep class !io.flutter.embedding.engine.deferredcomponents.PlayStoreDeferredComponentManager, !io.flutter.plugins.googlesignin.**, io.flutter.** { *; }
+-keep class !io.flutter.embedding.engine.deferredcomponents.PlayStoreDeferredComponentManager, !io.flutter.embedding.android.FlutterPlayStoreSplitApplication, !io.flutter.plugins.googlesignin.**, io.flutter.** { *; }
 -dontwarn io.flutter.plugins.googlesignin.**
 
 # flutter_inappwebview
