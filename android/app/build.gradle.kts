@@ -194,8 +194,11 @@ dependencies {
 // Disable AGP's ArtProfile (baseline profile) generation — baseline.prof /
 // baseline.profm are not deterministic between builds, which breaks
 // reproducible builds (F-Droid docs, "baseline.prof not deterministic").
-tasks.whenTaskAdded {
-    if (name.contains("ArtProfile")) {
+// NOTE: the docs' `tasks.whenTaskAdded { ... }` form breaks this Flutter
+// version's task wiring ("Task with name 'compileFlutterBuildDebug' not
+// found"); afterEvaluate + configureEach disables the same tasks safely.
+afterEvaluate {
+    tasks.matching { it.name.contains("ArtProfile") }.configureEach {
         enabled = false
     }
 }
