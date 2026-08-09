@@ -55,4 +55,9 @@ WHAT AURORA DOES NOT DO
 
 Aurora is free and open source (GPL-3.0). This build is the fully unlocked open-source edition — every feature is enabled, with no purchases, no account and no ads.
 
+DONATE
+
+• Patreon: https://www.patreon.com/c/Ahjie521
+• USDT (BEP20/BSC): 0xd08d47bde441888166b801616754c667672cd502
+
 Not affiliated with Google, YouTube, or any third-party media service.
