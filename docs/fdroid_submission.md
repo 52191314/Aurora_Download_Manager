@@ -31,6 +31,7 @@ AuthorName: Mengsean Cheang
 AuthorEmail: xianspired@gmail.com
 SourceCode: https://github.com/52191314/Aurora_Download_Manager
 IssueTracker: https://github.com/52191314/Aurora_Download_Manager/issues
+Donate: https://www.patreon.com/c/Ahjie521
 AutoName: Aurora Download Manager
 
 RepoType: git

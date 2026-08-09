@@ -270,6 +270,16 @@ We love contributions! Check out our detailed **[CONTRIBUTING.md](CONTRIBUTING.m
 
 ---
 
+## 💖 Donate
+
+Aurora Download Manager is free and open source. If you would like to support
+development:
+
+- **Patreon**: https://www.patreon.com/c/Ahjie521
+- **USDT (BEP20 / BSC)**: `0xd08d47bde441888166b801616754c667672cd502`
+
+---
+
 ## 📜 Requirements & License
 
 - **Flutter SDK**: Dart `^3.8.1`
