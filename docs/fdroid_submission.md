@@ -40,7 +40,7 @@ Repo: https://github.com/52191314/Aurora_Download_Manager.git
 Builds:
   - versionName: 1.0.1
     versionCode: 54
-    commit: dc72c0a722c3e964751f6352ccca2596a35ed1ec
+    commit: 90a0aea4664ed458b8edc0e0c8af42467f4d7a05
     srclibs:
       - flutter@stable
     output: build/app/outputs/flutter-apk/app-release.apk
