@@ -24,6 +24,7 @@ import '../../premium/pro_entitlement.dart';
 import '../../premium/pro_features.dart';
 import '../../premium/oss_upsell.dart';
 import '../../premium/accent_pack.dart';
+import '../donate_sheet.dart';
 import 'user_guide_page.dart';
 import '../../sniffer/controllers/site_profile_runtime.dart';
 import '../../sniffer/external_scheme.dart';
@@ -1960,6 +1961,14 @@ class _SettingsPageState extends State<SettingsPage> {
               Text('Built with Flutter and the Nord color palette.',
                   style: TextStyle(fontSize: 12, color: context.ac.textTertiary)),
             ],
+          )),
+          const SizedBox(height: 16),
+          Panel(child: ListTile(
+            leading: Icon(Icons.favorite_rounded, color: context.ac.accentFrost),
+            title: const Text('Support development'),
+            subtitle: const Text('Donate via Patreon or USDT (BEP20)'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => showDonateSheet(context, openUrl: widget.onOpenUrlInBrowser),
           )),
           const SizedBox(height: 16),
           Panel(child: Column(

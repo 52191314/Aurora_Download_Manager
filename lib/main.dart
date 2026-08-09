@@ -14,10 +14,12 @@ import 'notifications/download_notification_service.dart';
 import 'platform/download_foreground_service.dart';
 import 'platform/public_downloads_service.dart';
 import 'settings/download_settings.dart';
+import 'settings/donation_prompt_store.dart';
 import 'sniffer/browser_controller.dart';
 import 'sniffer/browser_open_request.dart';
 import 'sniffer/sniffer_screen.dart';
 import 'sniffer/sniffer_url_utils.dart';
+import 'ui/donate_sheet.dart';
 import 'theme/aurora_glass_background.dart';
 import 'theme/aurora_theme.dart';
 import 'theme/aurora_tokens.dart';
@@ -253,6 +255,12 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
   /// Guards concurrent soft dialogs if launch + first download race.
   static bool _batteryOptDialogShowing = false;
 
+  /// One-shot per process: the periodic donation prompt is scheduled at most
+  /// once, and only after the onboarding tour / permission prompts are done.
+  static bool _donationPromptScheduled = false;
+
+  final DonationPromptStore _donationStore = DonationPromptStore();
+
   final GlobalKey _urlInputKey = GlobalKey();
   final GlobalKey _browserTabKey = GlobalKey();
   final GlobalKey _browserMenuKey = GlobalKey();
@@ -331,6 +339,7 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
         // Unlock + request only after finish / skip.
         _permissionPromptsAllowed = true;
         unawaited(_requestPostOnboardingPermissions());
+        _scheduleDonationPrompt();
       },
     );
   }
@@ -348,6 +357,37 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     await Future.delayed(const Duration(milliseconds: 350));
     if (!mounted || !_canPromptPermissions) return;
     await _promptBatteryOptIfNeeded();
+  }
+
+  /// One-shot, non-blocking donation prompt: 7-day install grace, 7-day
+  /// cooldown, permanent opt-out. Runs a few seconds after launch so it never
+  /// stacks with the onboarding tour or the permission dialogs, and opens the
+  /// Patreon link in the built-in browser when tapped.
+  void _scheduleDonationPrompt() {
+    if (_donationPromptScheduled) return;
+    _donationPromptScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(seconds: 6));
+      if (!mounted || !_canPromptPermissions) return;
+      await _donationStore.load();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (!shouldShowDonationPrompt(
+        neverAskAgain: _donationStore.neverAskAgain,
+        installEpochMs: _donationStore.installEpochMs,
+        lastPromptEpochMs: _donationStore.lastPromptEpochMs,
+        nowEpochMs: now,
+      )) {
+        return;
+      }
+      await _donationStore.markPrompted();
+      if (!mounted || !_canPromptPermissions) return;
+      await showDonateSheet(
+        context,
+        openUrl: (url) => widget.browserController?.openUrlInNewTab(url),
+        showNeverAgain: true,
+        onNeverAskAgain: _donationStore.setNeverAskAgain,
+      );
+    });
   }
 
   late final DownloadQueue _downloadQueue;
@@ -500,6 +540,7 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       }
       _permissionPromptsAllowed = true;
       unawaited(_requestPostOnboardingPermissions());
+      _scheduleDonationPrompt();
     });
   }
 
