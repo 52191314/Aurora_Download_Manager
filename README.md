@@ -247,26 +247,6 @@ unzip -l build/app/outputs/flutter-apk/app-debug.apk \
   | grep -iE "play-services|billing|feature-delivery|play-core"   # must be empty
 ```
 
----
-
-## Awesome Ecosystem & Community
-
-Aurora Download Manager is designed for developers and open-source enthusiasts. It fits into curated developer indices:
-
-- **[Awesome Flutter](https://github.com/Solido/awesome-flutter)** — Open-source production Flutter applications.
-- **[Awesome Android](https://github.com/JStumpp/awesome-android)** — Top open-source Android utilities and download managers.
-- **[Awesome Open Source Apps](https://github.com/serhii-londar/open-source-mac-os-apps)** — Privacy-respecting mobile tools.
-
-Have a feedback idea or feature request? Join our community discussions on [GitHub Discussions](https://github.com/52191314/Aurora_Download_Manager/discussions) or submit issues via the [Issue Tracker](https://github.com/52191314/Aurora_Download_Manager/issues).
-
----
-
-## Open for Contributions
-
-We love contributions! Check out our detailed **[CONTRIBUTING.md](CONTRIBUTING.md)** guide to get started.
-
-- **[Good First Issues](https://github.com/52191314/Aurora_Download_Manager/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)** — Perfect for newcomers looking for quick, high-impact fixes.
-- **[Help Wanted](https://github.com/52191314/Aurora_Download_Manager/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)** — Feature requests and sniffer enhancements seeking community pull requests.
 
 ---
 
