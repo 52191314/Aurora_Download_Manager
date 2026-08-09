@@ -85,11 +85,14 @@ jobs:
             --replace unaligned.apk build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload APK to release
+        working-directory: /upstream/path/aurora-downloader
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # '#name' syntax keeps the Binaries URL pattern (aurora-downloader-v<ver>.apk);
-          # --clobber replaces the existing asset in place.
+          # Rename to the Binaries URL pattern (aurora-downloader-v<ver>.apk) so
+          # --clobber replaces the existing asset in place. (gh 'file#name' sets
+          # the display label, NOT the asset name — proven on v1.0.1.)
+          mv build/app/outputs/flutter-apk/app-release.apk "aurora-downloader-${{ github.event.inputs.tag }}.apk"
           gh release upload "${{ github.event.inputs.tag }}" \
-            "/upstream/path/aurora-downloader/build/app/outputs/flutter-apk/app-release.apk#aurora-downloader-${{ github.event.inputs.tag }}.apk" \
+            "aurora-downloader-${{ github.event.inputs.tag }}.apk" \
             --clobber --repo 52191314/Aurora_Download_Manager
