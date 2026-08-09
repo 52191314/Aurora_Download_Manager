@@ -7,3 +7,6 @@ compatibility_date = "2026-01-01"
 
 [assets]
 directory = "./website"
+# Unmatched paths (e.g. /donation) serve index.html — replaces the
+# _redirects rewrite, which assets-only Workers do not process.
+not_found_handling = "single-page-application"
