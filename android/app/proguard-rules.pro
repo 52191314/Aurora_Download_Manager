@@ -19,6 +19,13 @@
 -keep class com.pichillilorenzo.flutter_inappwebview_webview.** { *; }
 -keep class com.pichillilorenzo.flutter_inappwebview_android.** { *; }
 
+# kotlinx.coroutines — R8's ServiceLoader optimization merges the
+# META-INF/services files in a non-deterministic order between builds,
+# breaking reproducible builds. Keep them untouched (F-Droid docs,
+# "R8 Optimizer" section).
+-keep class kotlinx.coroutines.CoroutineExceptionHandler
+-keep class kotlinx.coroutines.internal.MainDispatcherFactory
+
 # Kotlin reflective calls
 -keepattributes *Annotation*, InnerClasses, Signature, Exceptions, EnclosingMethod
 -keep class kotlin.Metadata { *; }

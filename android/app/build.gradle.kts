@@ -190,3 +190,12 @@ dependencies {
 
 // Native payload for :ffmpeg is extracted in android/ffmpeg/build.gradle.kts.
 // Base exclusion is packaging.jniLibs.excludes above (Play only).
+
+// Disable AGP's ArtProfile (baseline profile) generation — baseline.prof /
+// baseline.profm are not deterministic between builds, which breaks
+// reproducible builds (F-Droid docs, "baseline.prof not deterministic").
+tasks.whenTaskAdded {
+    if (name.contains("ArtProfile")) {
+        enabled = false
+    }
+}

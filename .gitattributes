@@ -1,0 +1,11 @@
+# Normalize line endings for files that end up inside the APK, so Windows
+# checkouts cannot introduce CRLF differences vs the Linux F-Droid build
+# (reproducible builds require byte-identical assets).
+assets/**/*.js text eol=lf
+assets/**/*.html text eol=lf
+assets/**/*.css text eol=lf
+assets/**/*.frag text eol=lf
+assets/**/*.json text eol=lf
+*.dart text eol=lf
+*.kt text eol=lf
+*.kts text eol=lf

@@ -1,0 +1,89 @@
+# Official release APK builder.
+#
+# Builds the release APK in an environment that mirrors the F-Droid build
+# (Linux, JDK 21, Android SDK at /opt/android-sdk, Flutter 3.44.9 pinned,
+# PUB_CACHE inside the repo, repo at a fixed absolute path) so the APK is
+# byte-identical to what F-Droid's CI produces and the reproducible-build
+# check (Binaries + AllowedAPKSigningKeys) passes.
+#
+# The flutter-version: line is read by the fdroiddata recipe
+# (templates/build-flutter.yml pattern) — keep its exact shape.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Git tag to build and attach the APK to (e.g. v1.0.1)'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: repo
+
+      - name: Move repo to the F-Droid-matching build path
+        run: |
+          sudo mkdir -p /upstream/path
+          sudo mv "$GITHUB_WORKSPACE/repo" /upstream/path/aurora-downloader
+          sudo chown -R runner /upstream/path/aurora-downloader
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Symlink Android SDK to the F-Droid buildserver path
+        run: |
+          sudo ln -sfn "$ANDROID_HOME" /opt/android-sdk
+
+      - name: Install Android NDK 28.2.13676358 (r28c)
+        run: |
+          echo "y" | sudo "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" >/dev/null
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.9'
+          channel: stable
+
+      - name: Restore release signing key
+        working-directory: /upstream/path/aurora-downloader
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > android/upload-keystore.jks
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=upload-keystore.jks\n' \
+            "$KEYSTORE_PASS" "$KEY_PASS" "$KEY_ALIAS" > android/key.properties
+
+      - name: Build release APK
+        working-directory: /upstream/path/aurora-downloader
+        run: |
+          export PUB_CACHE=$(pwd)/.pub-cache
+          flutter config --no-analytics --android-sdk /opt/android-sdk
+          flutter pub get --enforce-lockfile
+          flutter build apk --release
+
+      - name: Normalize ZIP metadata (match the F-Droid postbuild)
+        working-directory: /upstream/path/aurora-downloader
+        run: |
+          git clone -q --depth 1 --branch v0.3.0 \
+            https://github.com/obfusk/reproducible-apk-tools.git /tmp/reproducible-apk-tools
+          python3 /tmp/reproducible-apk-tools/zipalign.py --page-size 16 --pad-like-apksigner \
+            --replace build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload APK to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.inputs.tag }}" \
+            /upstream/path/aurora-downloader/build/app/outputs/flutter-apk/app-release.apk \
+            --clobber --repo 52191314/Aurora_Download_Manager
