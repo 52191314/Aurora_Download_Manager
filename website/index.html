@@ -857,19 +857,15 @@
                 <span id="copy-icon">📋</span>
                 <span id="copy-label">Copy</span>
               </button>
-              <button class="btn-icon-action" onclick="toggleQR()">
-                <span>📱</span>
-                <span>QR</span>
-              </button>
             </div>
           </div>
 
-          <!-- Interactive Expandable QR Code -->
-          <div class="qr-expandable" id="qr-container">
-            <div class="qr-image-container">
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=0xd08d47bde441888166b801616754c667672cd502&color=080c14&bgcolor=ffffff" alt="USDT BEP20 QR Code" loading="lazy">
+          <!-- Pre-rendered SVG Vector QR Code -->
+          <div style="text-align: center; margin-top: 16px; padding-top: 14px; border-top: 1px dashed rgba(255, 255, 255, 0.1);">
+            <div class="qr-image-container" style="background: #ffffff; padding: 10px; border-radius: 16px; display: inline-block; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);">
+              <img src="./usdt_qr.svg" alt="USDT BEP20 QR Code" style="width: 180px; height: 180px; display: block;" loading="lazy">
             </div>
-            <p style="font-size: 12px; color: var(--text-sub); margin-top: 6px;">Scan with crypto wallet app</p>
+            <p style="font-size: 12.5px; color: #4ade80; font-weight: 600; margin-top: 8px;">⚡ Scan with crypto wallet app</p>
           </div>
         </div>
       </div>
