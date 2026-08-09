@@ -1,1 +1,1 @@
-Open-source edition: every feature unlocked by default, zero proprietary components, no trackers or ads.
+Open-source edition — every feature unlocked, no proprietary components, no trackers or ads. Torrents auto-save, 16 KB page-size support, faster download queue, streaming Vault encryption, smaller app size.

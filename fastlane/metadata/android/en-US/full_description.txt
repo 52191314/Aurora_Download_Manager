@@ -1,20 +1,58 @@
-Aurora Download Manager is an open-source Android browser and downloader that captures media while you browse. Streams, videos and files detected in the built-in browser are added to a background download queue with one tap.
+Aurora Download Manager is a web browser with a serious download manager built in.
 
-Download engine
-- Multi-threaded segmented HTTP with pause/resume, speed limiting, stall detection and auto-retry
-- HLS (m3u8) and DASH (mpd) parsing with AES-128 decryption and TS-to-MP4 remuxing
-- Native BitTorrent and magnet link support via libtorrent
-- Session cookies, Referer and custom User-Agents retained for WAF/Cloudflare-protected hosts
-- Foreground service keeps downloads alive; dead links are revived by headless re-sniffing
+BROWSE WITHOUT THE JUNK
 
-Built-in browser
-- Multi-tab browsing with tab groups and User-Agent switching
-- Hybrid adblock engine (native C++ domain trie + Aho-Corasick)
-- Media capture tray with metadata enrichment and format/quality selection
+• Ad and popup blocking built in, so pages load faster and cleaner
+• Multi-tab browsing with tab groups, and your session comes back after a restart
+• Reader mode, find in page, save a page for offline, and hide page elements you don't want
 
-Media tools
-- FFmpeg Studio for editing, transcoding and extracting audio
-- Encrypted vault with AES-256 and biometric unlock, plus E2EE vault sync
-- Aurora Watcher, Automation API, per-site profiles and scheduled downloads
+FIND THE FILE
 
-This build is the fully unlocked open-source edition: every feature is enabled by default and there are no proprietary components, no trackers and no ads. Released under the GNU General Public License v3.0.
+• Aurora spots downloadable media and file links while you browse, and keeps finding them on pages where simpler tools come up empty
+• Grab a batch in one tap — unlimited batch capture
+• Streaming playlists are reassembled into a single playable file when the site allows it
+• Preview a video before you commit to downloading it, in a built-in player with gesture seek, speed control and picture-in-picture
+• Filenames get cleaned up and sorted into folders for you
+
+DOWNLOADS THAT ACTUALLY FINISH
+
+• Every file downloads in parallel parts — far faster than a single connection on most servers
+• Pause anything and pick it up later. Downloads survive app restarts, low memory, and Android's background limits
+• Refresh a link that has gone stale; dead links are revived automatically
+• Progress, speed, and status for the whole queue at a glance
+
+TORRENTS, INCLUDED
+
+• Download torrents and magnet links with a fast native engine
+• Finished torrents save straight to your Downloads folder — multi-file torrents included
+• Pause, resume, and seed from your device
+
+MOVING IN FROM ANOTHER APP
+
+• Import your existing download list from other Android download managers, so you start with your library intact instead of from zero
+• Restore from your own backups — including inside Samsung Secure Folder and other dual-app and work-profile spaces
+
+YOUR FILES STAY YOURS
+
+• Browsing and downloads stay on your device
+• Finished files land in your normal Downloads folder
+• Send files to your computer over your own Wi-Fi, with nothing routed through a server
+• No account required. No ads. No trackers.
+
+EVERYTHING UNLOCKED
+
+• Up to 64 downloads at once and 64 parts per file
+• Full media conversion suite (FFmpeg Studio) included in the app
+• Unlimited ad-block filter lists, custom lists, element-hiding rules, and the tracker pack
+• Download rules, schedules, night mode, per-site profiles, proxy, and unlimited tab groups
+• Automatic dead-link revival, unlimited batch capture and audio extraction
+• Private vault with biometric lock and sync, folder watcher, and a local automation API
+
+WHAT AURORA DOES NOT DO
+
+• Ad blocking works inside Aurora's own browser only. It is not a VPN and does not filter other apps
+• Only download content you have the right to download
+
+Aurora is free and open source (GPL-3.0). This build is the fully unlocked open-source edition — every feature is enabled, with no purchases, no account and no ads.
+
+Not affiliated with Google, YouTube, or any third-party media service.
