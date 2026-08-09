@@ -1973,7 +1973,7 @@ class _SettingsPageState extends State<SettingsPage> {
             title: const Text('Support development'),
             subtitle: const Text('Donate via Patreon or USDT (BEP20)'),
             trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => showDonateSheet(context, openUrl: widget.onOpenUrlInBrowser),
+            onTap: () => showDonateSheet(context),
           )),
           const SizedBox(height: 16),
           Panel(child: Column(

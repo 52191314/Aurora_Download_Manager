@@ -383,7 +383,6 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       if (!mounted || !_canPromptPermissions) return;
       await showDonateSheet(
         context,
-        openUrl: (url) => widget.browserController?.openUrlInNewTab(url),
         showNeverAgain: true,
         onNeverAskAgain: _donationStore.setNeverAskAgain,
       );

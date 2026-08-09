@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../settings/donation_prompt_store.dart';
+import '../sniffer/external_scheme.dart';
 
 /// Modal bottom sheet with the project's donation options (Patreon + USDT).
 ///
-/// [openUrl] opens the Patreon link in the app's built-in browser; when null
-/// the row falls back to copying the link. [showNeverAgain] renders the
-/// permanent opt-out used by the periodic prompt (not the settings row).
+/// The donation page row launches the system browser via ACTION_VIEW — the
+/// user's default browser opens it, or the system resolver prompts when no
+/// default is set. [showNeverAgain] renders the permanent opt-out used by
+/// the periodic prompt (not the settings row).
 Future<void> showDonateSheet(
   BuildContext context, {
-  void Function(String url)? openUrl,
   bool showNeverAgain = false,
   Future<void> Function()? onNeverAskAgain,
 }) {
@@ -18,7 +19,6 @@ Future<void> showDonateSheet(
     context: context,
     showDragHandle: true,
     builder: (_) => DonateSheet(
-      openUrl: openUrl,
       showNeverAgain: showNeverAgain,
       onNeverAskAgain: onNeverAskAgain,
     ),
@@ -26,13 +26,11 @@ Future<void> showDonateSheet(
 }
 
 class DonateSheet extends StatelessWidget {
-  final void Function(String url)? openUrl;
   final bool showNeverAgain;
   final Future<void> Function()? onNeverAskAgain;
 
   const DonateSheet({
     super.key,
-    this.openUrl,
     this.showNeverAgain = false,
     this.onNeverAskAgain,
   });
@@ -76,12 +74,12 @@ class DonateSheet extends StatelessWidget {
               title: const Text('Donation page'),
               subtitle: const Text(DonationLinks.website),
               trailing: const Icon(Icons.open_in_new_rounded, size: 18),
-              onTap: () {
-                final open = openUrl;
-                if (open != null) {
-                  open(DonationLinks.website);
-                } else {
-                  _copy(context, DonationLinks.website, 'Donation link');
+              onTap: () async {
+                // ACTION_VIEW: default browser, or system resolver when no
+                // default is set. Falls back to copying on failure.
+                final ok = await launchExternalAppUrl(DonationLinks.website);
+                if (!ok && context.mounted) {
+                  await _copy(context, DonationLinks.website, 'Donation link');
                 }
               },
             ),
