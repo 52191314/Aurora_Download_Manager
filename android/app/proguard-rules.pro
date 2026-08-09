@@ -1,10 +1,10 @@
-# Flutter Wrapper
--keep class io.flutter.app.** { *; }
--keep class io.flutter.plugin.** { *; }
--keep class io.flutter.util.** { *; }
--keep class io.flutter.view.** { *; }
--keep class io.flutter.** { *; }
--keep class io.flutter.plugins.** { *; }
+# Flutter Wrapper — keep all io.flutter.** EXCEPT:
+#   - PlayStoreDeferredComponentManager (references com.google.android.play.core.*)
+#   - GoogleSignInPlugin (references com.google.android.gms.*)
+# Both are bundled in Flutter's engine AAR but never used in this OSS edition.
+# The negation (!) lets R8 strip them so F-Droid's scanner finds no non-free classes.
+-keep class !io.flutter.embedding.engine.deferredcomponents.PlayStoreDeferredComponentManager, !io.flutter.plugins.googlesignin.**, io.flutter.** { *; }
+-dontwarn io.flutter.plugins.googlesignin.**
 
 # flutter_inappwebview
 -keep class com.pichillilorenzo.flutter_inappwebview.** { *; }
@@ -31,23 +31,14 @@
 # libtorrent_flutter
 -keep class com.derivlab.libtorrent_flutter.** { *; }
 
-# Google Drive / Sign-In / APIs
--keep class com.google.android.gms.** { *; }
--keep class com.google.api.** { *; }
-
-# Google Sign-In (reflection-based)
--keep class com.google.android.gms.auth.** { *; }
--keep class com.google.android.gms.common.** { *; }
-
-# Play Core (deferred component manager + feature delivery)
--keep class com.google.android.play.core.** { *; }
+# OSS edition: Google Drive / Sign-In, Play Core, and Play Billing keep
+# rules were removed — those proprietary libraries are not in this build.
+# Keeping them would prevent R8 from stripping the Play Core classes that
+# Flutter's engine references transitively (PlayStoreDeferredComponentManager),
+# causing F-Droid's scanner to flag the APK as containing non-free code.
 -dontwarn com.google.android.play.core.**
-
-# Play Billing (in_app_purchase) — R8 strips BillingClient interfaces & plugin wrappers
--keep class com.android.vending.billing.** { *; }
--keep class com.android.billingclient.** { *; }
--keep class io.flutter.plugins.inapppurchase.** { *; }
--keep class io.flutter.plugins.inapppurchase_android.** { *; }
+-dontwarn com.google.android.gms.**
+-dontwarn com.android.vending.billing.**
 
 # OkHttp (native download engine)
 -keep class okhttp3.** { *; }
