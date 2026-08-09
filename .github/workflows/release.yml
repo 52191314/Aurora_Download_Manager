@@ -17,6 +17,9 @@ on:
         description: 'Git tag to build and attach the APK to (e.g. v1.0.1)'
         required: true
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -85,6 +88,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # '#name' syntax keeps the Binaries URL pattern (aurora-downloader-v<ver>.apk);
+          # --clobber replaces the existing asset in place.
           gh release upload "${{ github.event.inputs.tag }}" \
-            /upstream/path/aurora-downloader/build/app/outputs/flutter-apk/app-release.apk \
+            "/upstream/path/aurora-downloader/build/app/outputs/flutter-apk/app-release.apk#aurora-downloader-${{ github.event.inputs.tag }}.apk" \
             --clobber --repo 52191314/Aurora_Download_Manager
