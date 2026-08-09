@@ -153,14 +153,6 @@ class DownloadQueue {
   /// a push-style notifier that fires unconditionally.
   final Map<String, _TaskLiveNotifier> _taskNotifiers = {};
 
-  /// Last value-snapshot fired to each per-task notifier (P1b). The queue
-  /// and the download engines mutate the SAME [DownloadTask] instance in
-  /// place, so the notifier guard must compare against a stored snapshot of
-  /// the rendered fields — comparing `notifier.value` against `task`
-  /// directly would always be equal (same object) and the live card would
-  /// never update past its initial values.
-  final Map<String, _TaskRenderSnapshot> _lastTaskSnapshot = {};
-
   /// Bumped on every task emit. The queue page's header (aggregate speed /
   /// counts) listens to this instead of rebuilding the whole list per tick.
   final ValueNotifier<int> queueVersion = ValueNotifier<int>(0);
@@ -174,7 +166,6 @@ class DownloadQueue {
 
   void _disposeTaskNotifier(String taskId) {
     _taskNotifiers.remove(taskId)?.dispose();
-    _lastTaskSnapshot.remove(taskId);
   }
   final StreamController<String> _warningController =
       StreamController<String>.broadcast();
@@ -1945,7 +1936,6 @@ class DownloadQueue {
       notifier.dispose();
     }
     _taskNotifiers.clear();
-    _lastTaskSnapshot.clear();
     queueVersion.dispose();
     if (!_taskUpdateController.isClosed) {
       await _taskUpdateController.close();
@@ -2005,21 +1995,14 @@ class DownloadQueue {
     if (!_taskUpdateController.isClosed) {
       _taskUpdateController.add(task);
     }
-    // P1b: per-task notifier for live card UI. Skip no-op notifications
-    // (pure ticks where nothing the card renders changed). The task object
-    // is mutated in place by the queue and engines, so the no-op check must
-    // compare a stored value snapshot — never `notifier.value` against
-    // `task` (same object, always equal, notifier never fires).
+    // P1b: per-task notifier for live card UI. Fire unconditionally — the
+    // card's live section is cheap to rebuild and must track every speed
+    // tick so progress/speed feel live (the top-left header already does).
     final notifier = _taskNotifiers[task.id];
     if (notifier != null) {
-      final snapshot = _TaskRenderSnapshot(task);
-      if (_lastTaskSnapshot[task.id] != snapshot) {
-        _lastTaskSnapshot[task.id] = snapshot;
-        notifier.push(task);
-      }
+      notifier.push(task);
     } else {
       _taskNotifiers[task.id] = _TaskLiveNotifier(task);
-      _lastTaskSnapshot[task.id] = _TaskRenderSnapshot(task);
     }
     if (!_notifiersClosed) {
       queueVersion.value++;
@@ -2271,61 +2254,6 @@ class DownloadQueue {
   }
 }
 
-/// Value snapshot of the fields [DownloadTaskCard] renders from the live
-/// per-task notifier. The queue and engines mutate the task in place, so
-/// this snapshot — not the task object — is what the no-op guard compares.
-class _TaskRenderSnapshot {
-  final int downloadedBytes;
-  final int totalBytes;
-  final int totalParts;
-  final int completedParts;
-  final int chunkCount;
-  final double speed;
-  final DownloadState state;
-  final String? statusMessage;
-  final String? errorMessage;
-  final DownloadFailure? failureReason;
-
-  _TaskRenderSnapshot(DownloadTask task)
-      : downloadedBytes = task.downloadedBytes,
-        totalBytes = task.totalBytes,
-        totalParts = task.totalParts,
-        completedParts = task.completedParts,
-        chunkCount = task.chunks.length,
-        speed = task.speed,
-        state = task.state,
-        statusMessage = task.statusMessage,
-        errorMessage = task.errorMessage,
-        failureReason = task.failureReason;
-
-  @override
-  bool operator ==(Object other) =>
-      other is _TaskRenderSnapshot &&
-      other.downloadedBytes == downloadedBytes &&
-      other.totalBytes == totalBytes &&
-      other.totalParts == totalParts &&
-      other.completedParts == completedParts &&
-      other.chunkCount == chunkCount &&
-      other.speed == speed &&
-      other.state == state &&
-      other.statusMessage == statusMessage &&
-      other.errorMessage == errorMessage &&
-      other.failureReason == failureReason;
-
-  @override
-  int get hashCode => Object.hash(
-        downloadedBytes,
-        totalBytes,
-        totalParts,
-        completedParts,
-        chunkCount,
-        speed,
-        state,
-        statusMessage,
-        errorMessage,
-        failureReason,
-      );
-}
 
 /// Push-style per-task notifier (P1b). [ValueNotifier] suppresses
 /// notifications when the assigned value is `==` to the current one — and

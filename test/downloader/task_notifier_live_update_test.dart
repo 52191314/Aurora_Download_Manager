@@ -41,15 +41,17 @@ void main() {
     expect(notifier.value.downloadedBytes, 400);
     expect(notifier.value.speed, 2000);
 
-    // Pure no-op tick (nothing the card renders changed) stays skipped.
+    // Every emit fires — even a no-op tick — so the card tracks every
+    // speed tick (the live section is cheap to rebuild; the top-left
+    // header already updates per tick).
     queue.emitTask(task);
-    expect(fires, 1, reason: 'no-op ticks must not fire the notifier');
+    expect(fires, 2, reason: 'no-op ticks fire too (unconditional push)');
 
     // Another real change fires again.
     task.downloadedBytes = 900;
     task.statusMessage = 'merging';
     queue.emitTask(task);
-    expect(fires, 2, reason: 'status change must fire the notifier');
+    expect(fires, 3, reason: 'status change must fire the notifier');
     expect(notifier.value.statusMessage, 'merging');
 
     await queue.dispose();
