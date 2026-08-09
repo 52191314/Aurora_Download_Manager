@@ -731,7 +731,40 @@
     .address-wrapper { flex-direction: column; align-items: stretch; }
     .action-btns { justify-content: flex-end; margin-top: 6px; }
     .btn-patreon { width: 100%; max-width: 100%; }
-    .comparison-table th, .comparison-table td { padding: 10px; font-size: 13px; }
+
+    /* Reshape the comparison table into per-feature blocks: the feature
+       label takes its own line, with the Aurora / Proprietary values
+       side by side beneath. Kills the tall wrapping rows and clipped
+       last row on narrow screens. */
+    .comparison-table,
+    .comparison-table tbody { display: block; }
+    .comparison-table thead { display: none; }
+    .comparison-table tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 10px;
+      padding: 12px 2px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .comparison-table tr:last-child { border-bottom: none; }
+    .comparison-table td {
+      border-bottom: none;
+      padding: 0;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .comparison-table td:first-child {
+      grid-column: 1 / -1;
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text);
+    }
+    .comparison-table td:nth-child(2) { color: var(--accent-cyan); }
+    .comparison-table td:nth-child(3) { color: #f43f5e; opacity: 0.85; }
+
+    /* Keep QR codes compact so cards don't dominate the viewport. */
+    .binance-qr-img { width: 55%; max-width: 180px; height: auto; }
+    .qr-image-container img { width: 150px; height: 150px; max-width: 100%; }
   }
 </style>
 </head>
