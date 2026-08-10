@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../../downloader/downloader.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/aurora_palette.dart';
 import '../../theme/aurora_tokens.dart';
 import 'download_properties_dialog.dart';
@@ -107,6 +108,7 @@ class DownloadCard extends StatelessWidget {
     this.selectionMode = false,
     this.selected = false,
     this.onToggleSelected,
+    this.onSelectRange,
     this.enableSwipe = true,
     this.dense = false,
     this.progressListenable,
@@ -143,6 +145,7 @@ class DownloadCard extends StatelessWidget {
   final bool selectionMode;
   final bool selected;
   final VoidCallback? onToggleSelected;
+  final VoidCallback? onSelectRange;
 
   final bool enableSwipe;
   final bool dense;
@@ -170,18 +173,33 @@ class DownloadCard extends StatelessWidget {
   }
 
   String _displayErrorMessage(String raw) {
-    return raw
-        .replaceAll(RegExp(r'\[PARTIAL:[\d.]+\]\s*'), '')
-        .trim();
+    var msg = raw.replaceAll(RegExp(r'\[PARTIAL:[\d.]+\]\s*'), '').trim();
+    if (msg.contains('\n')) {
+      msg = msg.split('\n').first.trim();
+    }
+    final prefixes = [
+      'Exception: ',
+      'SocketException: ',
+      'HttpException: ',
+      'FileSystemException: ',
+      'FormatException: ',
+      'DioException [unknown]: ',
+    ];
+    for (final p in prefixes) {
+      if (msg.startsWith(p)) {
+        msg = msg.substring(p.length).trim();
+      }
+    }
+    return msg;
   }
 
-  String _metadataLabel(DownloadTask t) {
+  String _metadataLabel(DownloadTask t, AppLocalizations l10n) {
     final parts = <String>[];
     if (t.state == DownloadState.scheduled) {
       if (t.scheduledStartAt != null) {
         final diff = t.scheduledStartAt!.difference(DateTime.now());
         if (diff.isNegative) {
-          parts.add('Starting…');
+          parts.add(l10n.cardStatusStarting);
         } else {
           String pad(int n) => n.toString().padLeft(2, '0');
           if (diff.inDays > 1) {
@@ -197,7 +215,7 @@ class DownloadCard extends StatelessWidget {
           }
         }
       } else {
-        parts.add('Scheduled');
+        parts.add(l10n.cardStatusScheduled);
       }
     } else if (t.state == DownloadState.downloading ||
         t.state == DownloadState.idle) {
@@ -209,7 +227,7 @@ class DownloadCard extends StatelessWidget {
           '${formatBytes(t.downloadedBytes)} / $totalLabel',
         );
       } else if (t.downloadedBytes > 0) {
-        parts.add('${formatBytes(t.downloadedBytes)} downloaded');
+        parts.add('${formatBytes(t.downloadedBytes)} ${l10n.cardStatusDownloaded}');
       }
       parts.add(formatSpeed(t.speed));
       // ETA: for HLS prefer remaining parts × avg speed when total bytes lag.
@@ -244,24 +262,24 @@ class DownloadCard extends StatelessWidget {
     } else if (t.state == DownloadState.completed && t.totalBytes > 0) {
       parts.add(formatBytes(t.totalBytes));
     } else if (t.state == DownloadState.completed && t.downloadedBytes > 0) {
-      parts.add('${formatBytes(t.downloadedBytes)} downloaded');
+      parts.add('${formatBytes(t.downloadedBytes)} ${l10n.cardStatusDownloaded}');
     } else if (t.state == DownloadState.failed) {
       if (t.downloadedBytes > 0) {
-        parts.add('${formatBytes(t.downloadedBytes)} saved');
+        parts.add('${formatBytes(t.downloadedBytes)} ${l10n.cardStatusSaved}');
       }
-      parts.add('Failed');
+      parts.add(l10n.cardStatusFailed);
     } else if (t.state == DownloadState.paused) {
       if (t.totalBytes > 0) {
         parts.add('${formatBytes(t.downloadedBytes)} / ${formatBytes(t.totalBytes)}');
       } else if (t.downloadedBytes > 0) {
-        parts.add('${formatBytes(t.downloadedBytes)} downloaded');
+        parts.add('${formatBytes(t.downloadedBytes)} ${l10n.cardStatusDownloaded}');
       }
-      parts.add('Paused');
+      parts.add(l10n.cardStatusPaused);
     } else if (t.state == DownloadState.merging) {
       if (t.totalBytes > 0 && t.downloadedBytes > 0) {
-        parts.add('Merging chunk ${t.downloadedBytes} of ${t.totalBytes}');
+        parts.add('${l10n.cardStatusMerging} ${t.downloadedBytes}/${t.totalBytes}');
       } else {
-        parts.add('Merging…');
+        parts.add(l10n.cardStatusMerging);
       }
     }
     return parts.join(' · ');
@@ -471,10 +489,13 @@ class DownloadCard extends StatelessWidget {
                                   .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(3),
                             ),
-                            child: Text(
+                            child: Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context)!;
+                                return Text(
                               task.priority == DownloadPriority.high
-                                  ? 'High'
-                                  : 'Low',
+                                  ? l10n.cardPriorityHigh
+                                  : l10n.cardPriorityLow,
                               style: TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 10,
@@ -483,6 +504,8 @@ class DownloadCard extends StatelessWidget {
                                     ? ac.accentFrost
                                     : ac.textSecondary,
                               ),
+                            );
+                              },
                             ),
                           ),
                       ],
@@ -495,11 +518,16 @@ class DownloadCard extends StatelessWidget {
                     if (progressListenable != null)
                       ValueListenableBuilder<DownloadTask>(
                         valueListenable: progressListenable!,
-                        builder: (context, liveTask, _) =>
-                            _buildLiveSection(liveTask, ac, color),
+                        builder: (context, liveTask, _) {
+                          final l10n = AppLocalizations.of(context)!;
+                          return _buildLiveSection(liveTask, ac, color, l10n);
+                        },
                       )
                     else
-                      _buildLiveSection(task, ac, color),
+                      Builder(builder: (context) {
+                        final l10n = AppLocalizations.of(context)!;
+                        return _buildLiveSection(task, ac, color, l10n);
+                      }),
                   ],
                 ),
               ),
@@ -542,6 +570,7 @@ class DownloadCard extends StatelessWidget {
     if (selectionMode) {
       card = GestureDetector(
         onTap: onToggleSelected,
+        onLongPress: onSelectRange,
         child: card,
       );
     }
@@ -562,7 +591,7 @@ class DownloadCard extends StatelessWidget {
   /// Progress-dependent column children (P1b). Rebuilt from the live task
   /// on every progress tick; everything else in the card stays static
   /// between state transitions.
-  Widget _buildLiveSection(DownloadTask liveTask, AColors ac, Color color) {
+  Widget _buildLiveSection(DownloadTask liveTask, AColors ac, Color color, AppLocalizations l10n) {
     final progress = (liveTask.totalParts > 0 ||
             liveTask.chunks.isNotEmpty ||
             liveTask.totalBytes > 0)
@@ -620,7 +649,7 @@ class DownloadCard extends StatelessWidget {
             padding: const EdgeInsets.only(top: 1),
             child: Text(
               liveTask.totalParts > 0
-                  ? '${liveTask.progressPercent}% · ${liveTask.completedParts}/${liveTask.totalParts} segs'
+                  ? '${liveTask.progressPercent}% · ${liveTask.completedParts}/${liveTask.totalParts} ${l10n.cardSegmentsLabel}'
                   : '${liveTask.progressPercent}%',
               style: TextStyle(
                 fontSize: 10,
@@ -632,7 +661,7 @@ class DownloadCard extends StatelessWidget {
           ),
         // Metadata line
         Text(
-          _metadataLabel(liveTask),
+          _metadataLabel(liveTask, l10n),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -665,8 +694,10 @@ class DownloadCard extends StatelessWidget {
             liveTask.errorMessage!.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 6, right: 4),
-            child: SelectableText(
+            child: Text(
               _displayErrorMessage(liveTask.errorMessage!),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11,
                 height: 1.35,
@@ -733,6 +764,7 @@ class DownloadCard extends StatelessWidget {
   }
 
   Widget _buildTaskActions(BuildContext context, AColors ac, Color color) {
+    final l10n = AppLocalizations.of(context)!;
     // ── Primary action icon ──────────────────────────────────────
     Widget? primaryAction;
 
@@ -740,7 +772,7 @@ class DownloadCard extends StatelessWidget {
       primaryAction = _compactButton(
         icon: Icons.cancel_outlined,
         color: ac.statusError,
-        tooltip: 'Cancel scheduled',
+        tooltip: l10n.cardTooltipCancelScheduled,
         onPressed: onCancel ?? () {},
       );
     } else if (task.state == DownloadState.downloading ||
@@ -748,14 +780,14 @@ class DownloadCard extends StatelessWidget {
       primaryAction = _compactButton(
         icon: Icons.pause_rounded,
         color: ac.accentFrost,
-        tooltip: 'Pause',
+        tooltip: l10n.cardTooltipPause,
         onPressed: onPause ?? () {},
       );
     } else if (task.state == DownloadState.paused) {
       primaryAction = _compactButton(
         icon: Icons.play_arrow_rounded,
         color: ac.accentFrost,
-        tooltip: 'Resume',
+        tooltip: l10n.cardTooltipResume,
         onPressed: onResume ?? () {},
       );
     } else if (task.state == DownloadState.merging) {
@@ -778,14 +810,14 @@ class DownloadCard extends StatelessWidget {
         primaryAction = _compactButton(
           icon: Icons.find_replace_rounded,
           color: ac.accentFrost,
-          tooltip: 'Refresh link',
+          tooltip: l10n.cardTooltipRefreshLink,
           onPressed: () => onResniffAuto!(task),
         );
       } else {
         primaryAction = _compactButton(
           icon: Icons.refresh_rounded,
           color: ac.statusError,
-          tooltip: 'Retry',
+          tooltip: l10n.cardTooltipRetry,
           onPressed: onRetry ?? () {},
         );
       }
@@ -793,7 +825,7 @@ class DownloadCard extends StatelessWidget {
       primaryAction = _compactButton(
         icon: Icons.open_in_new,
         color: ac.statusSuccess,
-        tooltip: 'Open',
+        tooltip: l10n.cardTooltipOpen,
         onPressed: () => onOpenDownload(task),
       );
     }
@@ -824,7 +856,7 @@ class DownloadCard extends StatelessWidget {
       popupItems.add(
         PopupMenuItem(
           value: 'open',
-          child: _popupRow(Icons.play_circle_outline, ac.statusSuccess, 'Open'),
+          child: _popupRow(Icons.play_circle_outline, ac.statusSuccess, l10n.cardMenuOpen),
         ),
       );
     }
@@ -834,7 +866,7 @@ class DownloadCard extends StatelessWidget {
       popupItems.add(
         PopupMenuItem(
           value: 'share',
-          child: _popupRow(Icons.share_outlined, ac.accentFrost, 'Share…'),
+          child: _popupRow(Icons.share_outlined, ac.accentFrost, l10n.cardMenuShare),
         ),
       );
     }
@@ -847,7 +879,7 @@ class DownloadCard extends StatelessWidget {
           child: _popupRow(
             Icons.computer_outlined,
             ac.accentFrost,
-            'Send to PC…',
+            l10n.cardMenuSendToPc,
           ),
         ),
       );
@@ -861,7 +893,7 @@ class DownloadCard extends StatelessWidget {
           child: _popupRow(
             Icons.shield_outlined,
             ac.accentPurple,
-            'Move to Vault…',
+            l10n.cardMenuMoveToVault,
           ),
         ),
       );
@@ -875,7 +907,7 @@ class DownloadCard extends StatelessWidget {
           child: _popupRow(
             Icons.movie_outlined,
             ac.accentFrost,
-            'Edit in FFmpeg Studio',
+            l10n.cardMenuFfmpegStudio,
           ),
         ),
       );
@@ -889,7 +921,7 @@ class DownloadCard extends StatelessWidget {
           child: _popupRow(
             Icons.download_for_offline_outlined,
             ac.accentFrost,
-            'Redownload',
+            l10n.cardMenuRedownload,
           ),
         ),
       );
@@ -903,7 +935,7 @@ class DownloadCard extends StatelessWidget {
       popupItems.add(
         PopupMenuItem(
           value: 'force_merge',
-          child: _popupRow(Icons.merge_type, Colors.orange, 'Force merge'),
+          child: _popupRow(Icons.merge_type, Colors.orange, l10n.cardMenuForceMerge),
         ),
       );
     }
@@ -920,16 +952,13 @@ class DownloadCard extends StatelessWidget {
           child: _popupRow(
             Icons.find_replace_rounded,
             ac.accentFrost,
-            'Refresh link',
+            l10n.cardMenuRefreshLink,
           ),
         ),
       );
     }
 
     // One browser action only:
-    //  • Incomplete + source → "Re-sniff on page" (opens + resniff mode)
-    //  • Otherwise + source → "Open source page" (open only)
-    // Avoids "Scan in browser" + "View source page" side-by-side.
     if (hasSource) {
       if (!isCompleted && !isActive && onResniffManual != null) {
         popupItems.add(
@@ -938,7 +967,7 @@ class DownloadCard extends StatelessWidget {
             child: _popupRow(
               Icons.open_in_browser_rounded,
               ac.accentPurple,
-              'Re-sniff on page',
+              l10n.cardMenuResniffOnPage,
             ),
           ),
         );
@@ -949,7 +978,7 @@ class DownloadCard extends StatelessWidget {
             child: _popupRow(
               Icons.public_outlined,
               ac.accentPurple,
-              'Open source page',
+              l10n.cardMenuOpenSourcePage,
             ),
           ),
         );
@@ -961,7 +990,7 @@ class DownloadCard extends StatelessWidget {
       popupItems.add(
         PopupMenuItem(
           value: 'schedule',
-          child: _popupRow(Icons.schedule, ac.accentFrost, 'Schedule download'),
+          child: _popupRow(Icons.schedule, ac.accentFrost, l10n.cardMenuScheduleDownload),
         ),
       );
     }
@@ -973,7 +1002,7 @@ class DownloadCard extends StatelessWidget {
         child: _popupRow(
           Icons.delete_outline,
           ac.statusError,
-          isCompleted ? 'Remove' : 'Cancel',
+          isCompleted ? l10n.cardMenuRemove : l10n.cardMenuCancel,
         ),
       ),
     );
@@ -982,7 +1011,7 @@ class DownloadCard extends StatelessWidget {
     popupItems.add(
       PopupMenuItem(
         value: 'properties',
-        child: _popupRow(Icons.info_outline, ac.textSecondary, 'Properties'),
+        child: _popupRow(Icons.info_outline, ac.textSecondary, l10n.cardMenuProperties),
       ),
     );
 
