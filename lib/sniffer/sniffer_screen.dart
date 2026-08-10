@@ -2697,7 +2697,15 @@ class _SnifferScreenState extends State<SnifferScreen>
   Future<String?> _fetchHtmlForCrawl(BrowserTab tab, String url) async {
     final viaWebView = await tab.controller.fetchViaJavaScript(url);
     if (viaWebView != null && viaWebView.isNotEmpty) return viaWebView;
-    final native = await NetworkBindingService.fetchUrl(url);
+    final cookies = await _sniffIntakeController.getCookiesForUrl(url);
+    final native = await NetworkBindingService.fetchUrl(
+      url,
+      headers: {
+        'User-Agent': downloadUserAgent(url, tab),
+        'Referer': url,
+      },
+      cookieHeader: cookies['Cookie'],
+    );
     final body = native?['body'];
     return body is String && body.isNotEmpty ? body : null;
   }
@@ -2755,6 +2763,15 @@ class _SnifferScreenState extends State<SnifferScreen>
 
     final crawler = ListingPageCrawler(
       fetchHtml: (url) => _fetchHtmlForCrawl(tab, url),
+      fetchMediaViaRenderedDom: (url) async {
+        // Last-resort tier for JS-built player URLs: load the detail page in
+        // a headless WebView (same WAF-bypass stack as the browser), let the
+        // player boot, then harvest every media URL the rendered DOM and the
+        // performance resource log expose.
+        final resniffer = HeadlessPageResniffer();
+        final found = await resniffer.resniffAll(url);
+        return found;
+      },
       isCancelled: () => cancelled,
       onProgress: (p) {
         progressText.value =
