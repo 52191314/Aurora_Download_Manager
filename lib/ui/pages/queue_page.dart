@@ -58,6 +58,19 @@ final class _TaskSection {
   const _TaskSection(this.title, this.tasks, this.accentColor);
 }
 
+/// Lightweight placeholder for a section header inside the lazy list plan —
+/// keeps the eager build cost O(sections) instead of O(tasks).
+final class _SectionHeaderRow {
+  final _TaskSection section;
+  final bool collapsed;
+  const _SectionHeaderRow(this.section, this.collapsed);
+}
+
+/// Lightweight gap marker between sections in the lazy list plan.
+final class _SectionGap {
+  const _SectionGap();
+}
+
 class QueuePage extends StatefulWidget {
   final DownloadQueue queue;
   final TextEditingController urlController;
@@ -754,30 +767,38 @@ class _QueuePageState extends State<QueuePage> {
     }
     final sections = _cachedSections!;
 
-    final items = <Widget>[];
+    // Lazy sectioned list: build a lightweight plan (headers + task refs,
+    // NOT widgets) and let SliverChildBuilderDelegate materialize only the
+    // visible rows. Building 40 task cards eagerly per frame is what made
+    // batch-added queues (40+ tasks) memory-heavy.
+    final plan = <Object>[];
     for (int i = 0; i < sections.length; i++) {
       final section = sections[i];
       final isCollapsed = _collapsedSections.contains(section.title);
 
       // Small gap between sections
       if (i > 0) {
-        items.add(const SizedBox(height: 6));
+        plan.add(const _SectionGap());
       }
 
-      items.add(_buildSectionHeader(section, isCollapsed));
+      plan.add(_SectionHeaderRow(section, isCollapsed));
 
       if (!isCollapsed) {
-        for (final task in section.tasks) {
-          items.add(_buildTaskRow(context, task, filteredTasks));
-        }
+        plan.addAll(section.tasks);
       }
     }
 
     return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) => items[index],
-        childCount: items.length,
-      ),
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final entry = plan[index];
+        if (entry is DownloadTask) {
+          return _buildTaskRow(context, entry, filteredTasks);
+        }
+        if (entry is _SectionHeaderRow) {
+          return _buildSectionHeader(entry.section, entry.collapsed);
+        }
+        return const SizedBox(height: 6);
+      }, childCount: plan.length),
     );
   }
 
