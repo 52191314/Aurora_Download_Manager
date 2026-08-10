@@ -194,3 +194,6 @@ opencode.jsonc
 !.dev.vars.example
 ios/Flutter/ephemeral/
 tooling/torrent_16k/
+
+# Local WebDAV test-server output (not application source)
+webdav_root/
