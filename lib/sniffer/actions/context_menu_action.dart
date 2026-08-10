@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 
 import 'package:aurora_downloader/downloader/downloader.dart';
 import 'package:aurora_downloader/platform/public_downloads_service.dart';
+import '../sheets/duplicate_download_dialog.dart';
 import 'package:aurora_downloader/sniffer/hls_playlist_cache_lookup.dart';
 import 'package:aurora_downloader/sniffer/models/browser_tab.dart';
 import 'package:aurora_downloader/sniffer/sniffer_url_utils.dart';
@@ -413,7 +414,7 @@ Future<void> addContextTargetToQueue(
       downloadFilenameFor,
   required Future<Map<String, String>> Function(String url) getCookiesForUrl,
   required DownloadQueue downloadQueue,
-  required Future<DuplicateChoice> Function(BuildContext context, String filename)
+  required Future<DuplicateDialogResult> Function(BuildContext context, String filename)
       showDuplicatePrompt,
   required void Function(String message) showSnack,
   required bool isMounted,
@@ -474,14 +475,12 @@ Future<void> addContextTargetToQueue(
         downloadQueue.samePageFilenameExists(filename, curUrl)) {
       if (!isMounted) return;
       // ignore: use_build_context_synchronously
-      final choice = await showDuplicatePrompt(context, filename);
-      if (choice == DuplicateChoice.skip) return;
-      if (choice == DuplicateChoice.updateExisting) {
+      final result = await showDuplicatePrompt(context, filename);
+      if (result.choice == DuplicateChoice.skip) return;
+      if (result.choice == DuplicateChoice.replace) {
         final existing = downloadQueue.getTaskByUrl(targetUrl);
         if (existing != null) {
-          await downloadQueue.updateTaskFromDonor(existing.id, task);
-          showSnack('Done — Link updated. Download will retry.');
-          return;
+          await downloadQueue.cancelTaskAsync(existing.id);
         }
       }
       force = true;

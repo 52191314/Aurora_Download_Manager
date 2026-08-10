@@ -999,7 +999,6 @@ class _SnifferScreenState extends State<SnifferScreen>
   @override
   Set<String> get builtWebViewTabIds => _builtWebViewTabIds;
 
-  @override
   List<String> get tabActivationOrder => _tabActivationOrder;
 
   @override
@@ -2834,18 +2833,16 @@ class _SnifferScreenState extends State<SnifferScreen>
     }
 
     // --- Enqueue all, skipping anything already queued ---
+    // --- Enqueue all, with WinRAR-style duplicate handling ---
     var added = 0;
     var skipped = 0;
+    final duplicatePolicy = DuplicatePolicy(choice: DuplicateChoice.skip);
     for (final media in toEnqueue) {
       if (!mounted) break;
       if (RestrictedMediaPolicy.isBlocked(
         mediaUrl: media.url,
         sourcePageUrl: media.sourcePageUrl,
       )) {
-        skipped++;
-        continue;
-      }
-      if (_downloadQueue.urlExists(media.url)) {
         skipped++;
         continue;
       }
@@ -2865,6 +2862,7 @@ class _SnifferScreenState extends State<SnifferScreen>
         ruleEngine: widget.ruleEngine,
         pageHost: pageUri?.host,
         silent: true,
+        batchDuplicatePolicy: duplicatePolicy,
       );
       if (_downloadQueue.urlExists(media.url)) {
         added++;
@@ -4761,6 +4759,32 @@ class _SnifferScreenState extends State<SnifferScreen>
     onInfo: (ctx, item) => _showMediaInfoSheet(ctx, item),
     onAddToQueue: (ctx, media, {List<SniffedMedia> variants = const []}) async =>
         _showAddQueueDialog(ctx, media, variants: variants),
+    onBatchEnqueue: (ctx, items) async {
+      final tab = _activeTab;
+      final duplicatePolicy = DuplicatePolicy(choice: DuplicateChoice.skip);
+      for (final media in items) {
+        if (!mounted) break;
+        final currentUrl = await tab.controller.currentUrl() ?? '';
+        final pageUri = Uri.tryParse(currentUrl);
+        await enqueueDirectDownload(
+          context: ctx,
+          tab: tab,
+          url: media.url,
+          suggestedFilename: media.name.isNotEmpty ? media.name : media.pageTitle,
+          downloadQueue: _downloadQueue,
+          settings: widget.settings,
+          baseDir: _baseDir,
+          baseTemp: _baseTemp,
+          getCookiesForUrl: _sniffIntakeController.getCookiesForUrl,
+          showSnack: _showSnack,
+          isMounted: () => mounted,
+          ruleEngine: widget.ruleEngine,
+          pageHost: pageUri?.host,
+          mediaTypeForRule: media.contentType,
+          batchDuplicatePolicy: duplicatePolicy,
+        );
+      }
+    },
     onRescan: () => unawaited(_activeTab.controller.rescanPage()),
   );
 
@@ -5186,7 +5210,7 @@ class _SnifferScreenState extends State<SnifferScreen>
     );
   }
 
-  Future<DuplicateChoice> _showDuplicatePrompt(
+  Future<DuplicateDialogResult> _showDuplicatePrompt(
     BuildContext context,
     String filename,
   ) {
