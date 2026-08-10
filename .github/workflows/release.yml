@@ -1,10 +1,10 @@
 # Official release APK builder.
 #
-# Builds the release APK in an environment that mirrors the F-Droid build
+# Builds per-ABI release APKs in an environment that mirrors the F-Droid build
 # (Linux, JDK 21, Android SDK at /opt/android-sdk, Flutter 3.44.9 pinned,
-# PUB_CACHE inside the repo, repo at a fixed absolute path) so the APK is
+# PUB_CACHE inside the repo, repo at a fixed absolute path) so the APKs are
 # byte-identical to what F-Droid's CI produces and the reproducible-build
-# check (Binaries + AllowedAPKSigningKeys) passes.
+# check (binary + AllowedAPKSigningKeys) passes.
 #
 # The flutter-version: line is read by the fdroiddata recipe
 # (templates/build-flutter.yml pattern) — keep its exact shape.
@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Git tag to build and attach the APK to (e.g. v1.0.1)'
+        description: 'Git tag to build and attach the APKs to (e.g. v1.0.2)'
         required: true
 
 permissions:
@@ -67,32 +67,42 @@ jobs:
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=upload-keystore.jks\n' \
             "$KEYSTORE_PASS" "$KEY_PASS" "$KEY_ALIAS" > android/key.properties
 
-      - name: Build release APK
+      - name: Build release APKs (ABI split)
         working-directory: /upstream/path/aurora-downloader
         run: |
           export PUB_CACHE=$(pwd)/.pub-cache
           flutter config --no-analytics --android-sdk /opt/android-sdk
           flutter pub get --enforce-lockfile
-          flutter build apk --release
+          # One build per ABI — the same commands as the fdroiddata recipe
+          # build blocks (templates/build-flutter.yml split pattern), so the
+          # outputs are byte-identical on both sides.
+          flutter build apk --release --split-per-abi --target-platform="android-arm"
+          flutter build apk --release --split-per-abi --target-platform="android-arm64"
 
       - name: Normalize ZIP metadata (match the F-Droid postbuild)
         working-directory: /upstream/path/aurora-downloader
         run: |
           git clone -q --depth 1 --branch v0.3.0 \
             https://github.com/obfusk/reproducible-apk-tools.git /tmp/reproducible-apk-tools
-          mv build/app/outputs/flutter-apk/app-release.apk unaligned.apk
-          python3 /tmp/reproducible-apk-tools/zipalign.py --page-size 16 --pad-like-apksigner \
-            --replace unaligned.apk build/app/outputs/flutter-apk/app-release.apk
+          for apk in app-armeabi-v7a-release.apk app-arm64-v8a-release.apk; do
+            mv "build/app/outputs/flutter-apk/$apk" unaligned.apk
+            python3 /tmp/reproducible-apk-tools/zipalign.py --page-size 16 --pad-like-apksigner \
+              --replace unaligned.apk "build/app/outputs/flutter-apk/$apk"
+          done
 
-      - name: Upload APK to release
+      - name: Upload APKs to release
         working-directory: /upstream/path/aurora-downloader
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Rename to the Binaries URL pattern (aurora-downloader-v<ver>.apk) so
-          # --clobber replaces the existing asset in place. (gh 'file#name' sets
+          # Rename to the binary URL pattern (aurora-downloader-v<ver>-<abi>.apk)
+          # so --clobber replaces existing assets in place. (gh 'file#name' sets
           # the display label, NOT the asset name — proven on v1.0.1.)
-          mv build/app/outputs/flutter-apk/app-release.apk "aurora-downloader-${{ github.event.inputs.tag }}.apk"
+          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+            "aurora-downloader-${{ github.event.inputs.tag }}-armeabi-v7a.apk"
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+            "aurora-downloader-${{ github.event.inputs.tag }}-arm64-v8a.apk"
           gh release upload "${{ github.event.inputs.tag }}" \
-            "aurora-downloader-${{ github.event.inputs.tag }}.apk" \
+            "aurora-downloader-${{ github.event.inputs.tag }}-armeabi-v7a.apk" \
+            "aurora-downloader-${{ github.event.inputs.tag }}-arm64-v8a.apk" \
             --clobber --repo 52191314/Aurora_Download_Manager

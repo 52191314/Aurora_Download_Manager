@@ -1,16 +1,31 @@
-# Aurora Downloader OSS 1.0.2 Release Notes
+# Aurora Downloader 1.1.0 (68) — Release Notes
 
-**Build Version**: 1.0.2+55  
-**Release Date**: August 10, 2026  
-**Build Channel**: GitHub Open-Source Edition (`AURORA_BUILD_CHANNEL=github`)
+Open-source (F-Droid / GitHub) edition.
 
-## Build 55 - Duplicate Download Dialog System & 100% French Localization
+## What's new in 1.1.0 (68)
 
-### WinRAR-Style Duplicate Download Handling
-- **Redesigned Options**: Replaced the old dialog options with a clear WinRAR-inspired action set: **Skip** (do nothing), **Replace** (cancel and remove existing task before adding fresh), and **Create New** (add as a separate download alongside).
-- **"Apply to all duplicates" Checkbox**: Batch downloads (listing page crawl, caught-media multi-select, series grab) show a checkbox to apply the chosen duplicate action to all subsequent duplicates in the batch.
-- **Direct Batch Enqueuing**: Multi-select downloads from the caught-media bottom sheet (`SniffedMediaSheet`) stream directly to the download queue using a shared `DuplicatePolicy`, eliminating the per-item `AddQueueDialog` popup loop.
+- **Per-ABI release APKs (ABI split)**: release builds are now split per CPU
+  architecture — `arm64-v8a` and `armeabi-v7a` — instead of one fat APK
+  containing both. Each download is roughly half the size (~70 MB arm64 /
+  ~80 MB 32-bit vs ~146 MB fat). The F-Droid recipe builds both splits and
+  serves each device the right one; GitHub Releases carries both APKs.
+- **Distinct versionCodes per ABI**: `versionCode * 10 + 1` for armeabi-v7a,
+  `versionCode * 10 + 2` for arm64-v8a (Flac-R precedent, merged in
+  fdroiddata). 1.1.0 ships as 681 (v7a) / 682 (arm64); the scheme keeps
+  F-Droid clients upgrading to the highest installable code.
+- **Reproducible-build enablement (F-Droid)**: the fdroiddata recipe now
+  carries per-ABI `binary:` references to the Linux-built GitHub release
+  assets plus `AllowedAPKSigningKeys`, so the F-Droid pipeline byte-compares
+  its builds against the official ones.
+- **Ported from the Play edition**: WinRAR-style duplicate download handling,
+  batch download directly in the capture sheet (DuplicatePolicy), and 100%
+  French localization — the OSS edition now tracks the Play build line
+  (1.1.0+68).
+- Build: 1.1.0+68, github channel. The fat APK path remains available for
+  sideloading (versionCode 68, no ABI filter applied).
 
-### Complete French (Français) Localization
-- **100% Full French Translation**: Audited and translated all 194 remaining untranslated French keys into natural, native French across all screens, subpages, settings sections, option descriptions, onboarding tour steps, tools menus, and dialogs.
-- **11-Language Parity**: French localization now achieves full parity with English, Simplified Chinese, Japanese, German, Spanish, Portuguese, Russian, Hindi, Arabic, and Indonesian.
+## Notes
+
+- The video/torrent engine payload is unchanged (~30 MB mpv/FFmpeg + ~12 MB
+  libtorrent per ABI) — the split reduces *download size per user*, not the
+  native footprint.

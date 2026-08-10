@@ -243,17 +243,30 @@ Why each line (the hard-won knowledge):
    there: `flutter-version: '3.44.9'`).
 2. Bump the recipe `commit:` to a tip that includes the reproducible fixes
    (`8afda12`+ — the lock + ArtProfile fix) and re-add:
-   - `binary:` (wrapped form) pointing at the GitHub release asset,
+   - one `Builds` block PER ABI (`armeabi-v7a` first, then `arm64-v8a`), each
+     with `output: build/app/outputs/flutter-apk/app-<abi>-release.apk` and a
+     wrapped `binary:` URL pointing at the matching GitHub release asset
+     (`aurora-downloader-v%v-<abi>.apk`) — Flac-R
+     (`metadata/com.resurrect.flac_r.yml`) is the proven merged shape,
+   - `VercodeOperation: ['%c * 10 + 1', '%c * 10 + 2']` (top level) so
+     checkupdates derives the per-ABI codes from the pubspec versionCode,
    - `sudo: mkdir -p /upstream/path/aurora-downloader + chown -R vagrant`,
    - the mv dance + `$$flutter$$` + `--enforce-lockfile` + `ndk: r28c` +
-     zipalign postbuild (see templates/build-flutter.yml + Flac-R
-     `metadata/com.resurrect.flac_r.yml` for the canonical shape).
-3. Run the release workflow (dispatch with the tag) — it builds on Linux at
-   `/upstream/path/aurora-downloader` with JDK 21, /opt/android-sdk, NDK r28c,
-   zipaligns, signs with the upload key, uploads to the release.
-4. The pipeline byte-compares; iterate on the diff classes with diffoscope /
-   the wiki HOWTO. Expected remaining deltas to chase: R8 dex ordering
-   (match core count), embedded paths, NDK build-id.
+     zipalign postbuild (see templates/build-flutter.yml + Flac-R for the
+     canonical shape),
+   - per-ABI `--split-per-abi --target-platform="android-arm"` /
+     `--target-platform="android-arm64"` in the `build:` commands.
+3. App side: `android/app/build.gradle.kts` overrides the versionCode per ABI
+   (`versionCode * 10 + abiCode`, `abiCodes = {armeabi-v7a: 1, arm64-v8a: 2}`)
+   so the split APKs carry distinct codes (681/682 for 1.1.0+68) — the same
+   Flac-R pattern. Fat APK builds are unaffected (no ABI filter -> no override).
+4. Run the release workflow (dispatch with the tag) — it builds both ABIs on
+   Linux at `/upstream/path/aurora-downloader` with JDK 21, /opt/android-sdk,
+   NDK r28c, zipaligns each APK, signs with the upload key, uploads both
+   per-ABI assets to the release.
+5. The pipeline byte-compares both splits; iterate on the diff classes with
+   diffoscope / the wiki HOWTO. Expected remaining deltas to chase: R8 dex
+   ordering (match core count), embedded paths, NDK build-id.
 
 ## Verification tooling used
 
