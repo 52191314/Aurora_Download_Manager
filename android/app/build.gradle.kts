@@ -1,3 +1,4 @@
+import com.android.build.gradle.internal.api.ApkVariantOutputImpl
 import java.io.FileInputStream
 import java.util.Properties
 
@@ -24,6 +25,13 @@ if (keystorePropertiesFile.exists()) {
 // ---------------------------------------------------------------------------
 val isPlayChannel = gradle.extensions.getExtraProperties().has("auroraPlayChannel") &&
     (gradle.extensions.getExtraProperties().get("auroraPlayChannel") as Boolean)
+
+// F-Droid ABI split (templates/build-flutter.yml + Flac-R precedent): each
+// per-ABI APK gets a distinct versionCode so F-Droid serves the right split
+// and clients upgrade to the highest installable code. v7a < arm64 ordering.
+// Only split APK outputs carry an ABI filter — fat APK builds keep the plain
+// versionCode from pubspec.
+val abiCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2)
 
 // Channel switches (play <-> github) change which dynamic features are wired
 // into :app, but AGP does not track that set as an input of
@@ -64,9 +72,11 @@ android {
         targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
+        // NO ndk.abiFilters here: with `--split-per-abi` AGP errors on
+        // "ndk abiFilters cannot be present when splits abi filters are set"
+        // (Flac-R has no abiFilters for the same reason). ABI filtering is
+        // done by packaging.jniLibs.excludes below (x86/x86_64/mips) plus the
+        // flutter --target-platform / splits mechanism.
     }
 
     // Native adblock engine — C++ implementation with domain trie + Aho-Corasick.
@@ -169,6 +179,18 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+}
+
+// Per-ABI versionCode override — see abiCodes above (Flac-R
+// com.resurrect.flac_r pattern, merged in fdroiddata 2026).
+android.applicationVariants.configureEach {
+    val variant = this
+    variant.outputs.forEach { output ->
+        val abiCode = abiCodes[output.filters.find { it.filterType == "ABI" }?.identifier]
+        if (abiCode != null) {
+            (output as ApkVariantOutputImpl).versionCodeOverride = variant.versionCode * 10 + abiCode
         }
     }
 }
