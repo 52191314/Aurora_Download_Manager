@@ -1,45 +1,31 @@
 # Aurora Download Manager — website
 
-Static donation / project site, deployed on **Cloudflare Pages** (free tier).
+Static landing and donation site, deployed on **Cloudflare Pages** (free tier).
 
-- `index.html` — single self-contained page (no build step, no frameworks, no trackers).
-- `_redirects` — makes `/donation` (and `/donation/`) serve the same page as `/`.
+- `index.html` — main landing page showcasing Aurora Download Manager features and downloads.
+- `donation.html` — dedicated voluntary support and donation page with glitch-free responsive mobile layout.
+- `_redirects` — routes `/donation` and `/donation/` to `donation.html`.
 - `FUNDING.yml` (repo root) — F-Droid donation-link verification signal; points at the site.
 
-## Deploy (Cloudflare dashboard, ~5 min)
+## Deploy (Cloudflare dashboard)
 
 1. **Create the Pages project**
-   - cloudflare.com → Workers & Pages → Create → Pages → *Connect to Git*
+   - cloudflare.com -> Workers & Pages -> Create -> Pages -> *Connect to Git*
      (repo `52191314/Aurora_Download_Manager`, branch `master`, build command: none,
      output directory: `website`) — every push to `master` auto-deploys.
-   - Or *Direct Upload*: drag the `website/` folder contents in.
+   - Or *Direct Upload*: upload the `website/` directory contents.
 2. **Attach the custom domain**
-   - Pages project → Custom domains → Add `ahjie521.store` and `www.ahjie521.store`.
-   - Cloudflare auto-creates the CNAME records. Note: the zone currently has
-     **zero DNS records** (the domain does not resolve yet), so this step is
-     what actually brings the site online.
+   - Pages project -> Custom domains -> Add `ahjie521.store` and `www.ahjie521.store`.
 3. **Verify**
-   - `curl -I https://ahjie521.store/donation` → 200, and
-   - `curl -I https://ahjie521.store/` → 200.
+   - `curl -I https://ahjie521.store/` -> 200 (Main landing page)
+   - `curl -I https://ahjie521.store/donation` -> 200 (Donation page)
 
 ## F-Droid note
 
-- F-Droid Inclusion Policy (Security & Legal Compliance): *"All donation links need
-  verification by upstream developers… The application's main website can also host
-  donation links."* Hosting the Donate link on this site is explicitly sanctioned.
-- Add `Donate: https://ahjie521.store/donation` to the app's F-Droid metadata
-  (in the fdroiddata fork) once the site is live.
+- F-Droid Inclusion Policy (Security & Legal Compliance): *"All donation links need verification by upstream developers... The application's main website can also host donation links."* Hosting the Donate link on this site is explicitly sanctioned.
+- Add `Donate: https://ahjie521.store/donation` to the app's F-Droid metadata once the site is live.
 
-## Content rules (why the page sells nothing)
+## Content rules
 
-- The page must stay **donation-only**. The Play build must never link to a page
-  that sells/unlocks digital features (`docs/play_store_compliance.md`); a pure
-  thank-you/donate page is fine, a storefront is not. The OSS edition is fully
-  unlocked anyway, so there is nothing to sell.
-- No analytics/tracking scripts on this page (privacy-first, matches the app).
-
-## TODO before going live
-
-- [ ] Replace PayPal / Ko-fi / Buy Me a Coffee placeholder links in `index.html`
-- [ ] Optional: replace the placeholder TRON (USDT) address, or drop the crypto line
-- [ ] Uncomment `github:` in `FUNDING.yml` if the GitHub account has Sponsors enabled
+- The donation page must remain voluntary-only with no digital feature unlocks (per Google Play Store policy guidelines).
+- No analytics/tracking scripts on the site (privacy-first, matching the app).
