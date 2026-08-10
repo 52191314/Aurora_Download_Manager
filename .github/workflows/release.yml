@@ -90,6 +90,30 @@ jobs:
               --replace unaligned.apk "build/app/outputs/flutter-apk/$apk"
           done
 
+      - name: Re-sign APKs (zipalign drops the v2/v3 signing block)
+        working-directory: /upstream/path/aurora-downloader
+        env:
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+        run: |
+          # zipalign.py re-zips via zipfile, which strips the v2/v3 signing
+          # block; a v1+v2 signature built by gradle is broken by that strip
+          # (CERT.SF references the missing v2) and a v2-only one leaves the
+          # APK unsigned -> fdroid's binary check fails with
+          # "Missing META-INF/MANIFEST.MF". Re-sign AFTER zipalign with a
+          # fresh v1+v2 signature (apksigner preserves the zip alignment).
+          APKSIGNER=$(ls "$ANDROID_HOME/build-tools/"*/apksigner | sort -V | tail -1)
+          for apk in app-armeabi-v7a-release.apk app-arm64-v8a-release.apk; do
+            "$APKSIGNER" sign --ks android/upload-keystore.jks \
+              --ks-key-alias "$KEY_ALIAS" --ks-pass "env:KEYSTORE_PASS" \
+              --key-pass "env:KEY_PASS" \
+              --v1-signing-enabled true --v2-signing-enabled true \
+              --out "build/app/outputs/flutter-apk/$apk.signed" \
+              "build/app/outputs/flutter-apk/$apk"
+            mv "build/app/outputs/flutter-apk/$apk.signed" "build/app/outputs/flutter-apk/$apk"
+          done
+
       - name: Upload APKs to release
         working-directory: /upstream/path/aurora-downloader
         env:
