@@ -16,6 +16,7 @@ import '../../premium/oss_upsell.dart';
 import '../../premium/vault_service.dart';
 import '../../premium/vault_sync_service.dart';
 import '../../premium/webdav_backup_service.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/aurora_palette.dart';
 import '../../theme/aurora_tokens.dart';
 import 'webdav_settings_page.dart';
@@ -197,7 +198,7 @@ class _VaultPageState extends State<VaultPage> with WidgetsBindingObserver {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete from vault?'),
+        title: Text(AppLocalizations.of(context)!.vaultDeleteFromVault),
         content: Text('Permanently delete ${entry.name}?\n'
             'This cannot be undone without the recovery key.'),
         actions: [
@@ -229,7 +230,7 @@ class _VaultPageState extends State<VaultPage> with WidgetsBindingObserver {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Nothing to import'),
+          title: Text(AppLocalizations.of(context)!.vaultNothingToImport),
           content: const Text(
               'No completed downloads found on disk. Finish a download first, '
               'then import it here.'),
@@ -252,7 +253,7 @@ class _VaultPageState extends State<VaultPage> with WidgetsBindingObserver {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Import into Private Vault'),
+          title: Text(AppLocalizations.of(context)!.vaultImportTitle),
           content: SizedBox(
             width: double.maxFinite,
             child: Column(
@@ -292,7 +293,7 @@ class _VaultPageState extends State<VaultPage> with WidgetsBindingObserver {
                   onChanged: importing
                       ? null
                       : (v) => setDialogState(() => deleteOriginal = v ?? true),
-                  title: const Text('Delete original after encrypting'),
+                  title: Text(AppLocalizations.of(context)!.vaultDeleteOriginal),
                   dense: true,
                 ),
               ],
@@ -614,7 +615,7 @@ class _VaultPageState extends State<VaultPage> with WidgetsBindingObserver {
     return Scaffold(
       backgroundColor: ac.surfaceField,
       appBar: AppBar(
-        title: const Text('Private Vault'),
+        title: Text(AppLocalizations.of(context)?.lblVaultTitle ?? 'Private Vault'),
         backgroundColor: ac.surfacePanel,
         actions: [
           if (_unlocked) ...[
@@ -721,7 +722,7 @@ class _VaultPageState extends State<VaultPage> with WidgetsBindingObserver {
               FilledButton.icon(
                 onPressed: _importFromDownloads,
                 icon: const Icon(Icons.file_upload_outlined),
-                label: const Text('Add files'),
+                label: Text(AppLocalizations.of(context)!.vaultAddFiles),
               ),
             ],
           ),
@@ -770,10 +771,10 @@ class _VaultPageState extends State<VaultPage> with WidgetsBindingObserver {
                     }
                   },
                   itemBuilder: (_) => [
-                    const PopupMenuItem(
+                    PopupMenuItem(
                         value: 'export',
                         child: Text('Export / Decrypt')),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                         value: 'delete',
                         child: Text('Delete')),
                   ],

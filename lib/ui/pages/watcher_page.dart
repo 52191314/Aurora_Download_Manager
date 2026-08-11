@@ -11,6 +11,7 @@ import '../../premium/pro_features.dart';
 import '../../premium/oss_upsell.dart';
 import '../../premium/watcher/watcher_models.dart';
 import '../../premium/watcher/watcher_service.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/aurora_palette.dart';
 import '../widgets/panel.dart';
 
@@ -62,7 +63,7 @@ class _WatcherPageState extends State<WatcherPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Aurora Watcher'),
+        title: Text(AppLocalizations.of(context)?.lblWatcherTitle ?? 'Aurora Watcher'),
         actions: [
           TextButton.icon(
             icon: const Icon(Icons.add, size: 18),
@@ -310,7 +311,7 @@ class _WatcherPageState extends State<WatcherPage> {
                       labelText: 'Type',
                       isDense: true,
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                           value: WatchKind.rss, child: Text('RSS Feed')),
                       DropdownMenuItem(
@@ -338,7 +339,7 @@ class _WatcherPageState extends State<WatcherPage> {
                       labelText: 'Check interval',
                       isDense: true,
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem(value: 30, child: Text('30 minutes')),
                       DropdownMenuItem(value: 60, child: Text('1 hour')),
                       DropdownMenuItem(value: 120, child: Text('2 hours')),
@@ -411,7 +412,7 @@ class _WatcherPageState extends State<WatcherPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Watch Rule'),
+        title: Text(AppLocalizations.of(context)!.watcherDeleteRulePrompt),
         content: Text('Delete "${rule.label ?? rule.url}"?'),
         actions: [
           TextButton(

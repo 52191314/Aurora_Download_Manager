@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../l10n/app_localizations.dart';
 import 'models/site_profile.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -642,10 +643,12 @@ class _SnifferScreenState extends State<SnifferScreen>
     tab.controller.setOnCloudflareBlockDetected((host, retrying) {
       if (!mounted) return;
       if (retrying) {
-        AuroraSnackbar.show(
+        if (mounted) {
+          AuroraSnackbar.show(
           context,
-          'Cloudflare block detected on $host — re-applying stealth & retrying...',
+          AppLocalizations.of(context)!.snifferSnackCloudflareRetrying,
         );
+        }
       } else {
         _showCloudflareBlockSheet(host, tab.currentUrl);
       }
@@ -685,7 +688,7 @@ class _SnifferScreenState extends State<SnifferScreen>
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Cloudflare Blocked $host',
+                      AppLocalizations.of(context)!.snifferCfTitle(host),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -706,7 +709,7 @@ class _SnifferScreenState extends State<SnifferScreen>
               // "done" row — re-opening CCT again is the loop the user sees.
               if (alreadyExternal) ...[
                 Text(
-                  'This site is set to always open in Chrome Custom Tab.',
+                  AppLocalizations.of(context)!.snifferCfAlreadyExternal,
                   style: TextStyle(color: Colors.grey[400], fontSize: 13),
                 ),
                 const SizedBox(height: 8),
@@ -728,7 +731,7 @@ class _SnifferScreenState extends State<SnifferScreen>
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   icon: const Icon(Icons.tab),
-                  label: const Text('Open in Chrome Custom Tab'),
+                  label: Text(AppLocalizations.of(context)!.snifferCfOpenCct),
                   onPressed: () {
                     Navigator.pop(context);
                     unawaited(CctBrowser.openCustomTab(targetUrl));
@@ -744,7 +747,7 @@ class _SnifferScreenState extends State<SnifferScreen>
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   icon: const Icon(Icons.open_in_new),
-                  label: const Text('Open in System Browser'),
+                  label: Text(AppLocalizations.of(context)!.snifferCfOpenSystem),
                   onPressed: () {
                     Navigator.pop(context);
                     unawaited(PublicDownloadsService.openUrlInChrome(targetUrl, preferChrome: false));
@@ -759,7 +762,7 @@ class _SnifferScreenState extends State<SnifferScreen>
                     foregroundColor: Colors.orangeAccent,
                   ),
                   icon: const Icon(Icons.star_outline),
-                  label: Text('Always open $host in Custom Tab'),
+                  label: Text(AppLocalizations.of(context)!.snifferCfAlwaysCct(host)),
                   onPressed: () {
                     Navigator.pop(context);
                     final updatedHosts = List<String>.from(widget.settings.externalBrowserHosts);
@@ -857,16 +860,20 @@ class _SnifferScreenState extends State<SnifferScreen>
     tab.canSeedWebViewUrl = true;
     if (mounted) setState(() {});
 
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-    if (!mounted || !_tabs.contains(tab)) return;
-
-    unawaited(
-      _loadUrlWithHostSettings(
-        tab,
-        Uri.parse(url),
-        addToHistory: false,
-      ),
-    );
+    // Start URL load on the next frame — the WebView widget tree is now
+    // built, so loadRequest will find a ready platform view. Previously
+    // a 350ms Future.delayed caused a visible white-screen gap (sometimes
+    // with a stale progress bar animating over nothing).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_tabs.contains(tab)) return;
+      unawaited(
+        _loadUrlWithHostSettings(
+          tab,
+          Uri.parse(url),
+          addToHistory: false,
+        ),
+      );
+    });
     unawaited(() async {
       try {
         final ua = await tab.controller.evaluateJavaScript(
@@ -2241,7 +2248,7 @@ class _SnifferScreenState extends State<SnifferScreen>
       _showStrictRedirectPrompt(
         tab: tab,
         uri: uri,
-        title: 'Popup blocked by Aurora',
+        title: AppLocalizations.of(context)!.snifferPopupBlockedTitle,
         method: event.reason,
         sourcePageUrl: event.sourcePageUrl,
       ),
@@ -2286,7 +2293,7 @@ class _SnifferScreenState extends State<SnifferScreen>
       _showStrictRedirectPrompt(
         tab: tab,
         uri: uri,
-        title: 'Redirect blocked by Aurora',
+        title: AppLocalizations.of(context)!.snifferRedirectBlockedTitle,
         method: data['method'] as String? ?? 'script',
         sourcePageUrl: data['sourcePageUrl'] as String?,
       ),
@@ -2639,7 +2646,7 @@ class _SnifferScreenState extends State<SnifferScreen>
       if (updatedSettings == null) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Element blocked. Undo?'),
+          content: Text(AppLocalizations.of(context)!.snifferSnackElementBlocked),
           duration: const Duration(seconds: 6),
           action: SnackBarAction(
             label: 'Undo',
@@ -2736,7 +2743,7 @@ class _SnifferScreenState extends State<SnifferScreen>
           valueListenable: progressText,
           builder: (ctx, text, _) {
             return AlertDialog(
-              title: const Text('Download all on this page'),
+              title: Text(AppLocalizations.of(context)!.snifferDlgDownloadAllTitle),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2832,7 +2839,6 @@ class _SnifferScreenState extends State<SnifferScreen>
       }
     }
 
-    // --- Enqueue all, skipping anything already queued ---
     // --- Enqueue all, with WinRAR-style duplicate handling ---
     var added = 0;
     var skipped = 0;
@@ -3038,7 +3044,7 @@ class _SnifferScreenState extends State<SnifferScreen>
                                     showDialog<bool>(
                                       context: context,
                                       builder: (ctx) => AlertDialog(
-                                        title: const Text('Site Data'),
+                                        title: Text(AppLocalizations.of(context)!.snifferDlgSiteDataTitle),
                                         content: Text(
                                           host.isNotEmpty
                                               ? 'Clear cookies, localStorage, and cache for $host?'
@@ -3400,7 +3406,7 @@ class _SnifferScreenState extends State<SnifferScreen>
     if (host.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Open a page first to adjust adblock settings.')));
+      ).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context)!.snifferSnackOpenPageFirst)));
       return;
     }
     final isAllowlisted = settings.adblockAllowlist.contains(host);
@@ -3412,7 +3418,7 @@ class _SnifferScreenState extends State<SnifferScreen>
           children: [
             const Icon(Icons.shield, color: Colors.green),
             const SizedBox(width: 8),
-            const Text('Adblock on this site'),
+            Text(AppLocalizations.of(context)!.snifferAdblockTitle),
           ],
         ),
         content: Column(
@@ -3429,7 +3435,7 @@ class _SnifferScreenState extends State<SnifferScreen>
                   : 'Adblock is turned off globally.',
             ),
             const SizedBox(height: 4),
-            Text('Blocked $blocked requests on this page'),
+            Text(AppLocalizations.of(context)!.snifferAdblockBlockedCount(blocked)),
             const Divider(),
             SwitchListTile(
               title: Text(
@@ -3459,7 +3465,7 @@ class _SnifferScreenState extends State<SnifferScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Done'),
+            child: Text(AppLocalizations.of(context)!.snifferAdblockDone),
           ),
         ],
       ),
@@ -3874,104 +3880,106 @@ class _SnifferScreenState extends State<SnifferScreen>
       }
     }
 
+    final l = AppLocalizations.of(context);
+
     // NOTE: When adding or updating a Settings entry, update both settings_page.dart (_buildSettingsHub) and sniffer_screen.dart (rawSettingsEntries).
     final rawSettingsEntries = [
       // 1. Downloads & Core Behavior
       OverflowMenuEntry(
         icon: Icons.download_rounded,
-        label: 'Defaults',
+        label: l?.menuDefaults ?? 'Defaults',
         onTap: () => unawaited(openSection(SettingsSection.defaults)),
       ),
       OverflowMenuEntry(
         icon: Icons.wifi_rounded,
-        label: 'Network',
+        label: l?.menuNetwork ?? 'Network',
         onTap: () => unawaited(openSection(SettingsSection.network)),
       ),
       OverflowMenuEntry(
         icon: Icons.rule_rounded,
-        label: 'Rules',
+        label: l?.menuRules ?? 'Rules',
         onTap: () => unawaited(openSection(SettingsSection.rules)),
       ),
       OverflowMenuEntry(
         icon: Icons.schedule_rounded,
-        label: 'Schedule',
+        label: l?.menuSchedule ?? 'Schedule',
         onTap: () => unawaited(openSection(SettingsSection.schedule)),
       ),
       // 2. Security, Privacy & Sniffing
       OverflowMenuEntry(
         icon: Icons.shield_rounded,
-        label: 'Adblock',
+        label: l?.menuAdblock ?? 'Adblock',
         onTap: () => unawaited(openSection(SettingsSection.adblock)),
       ),
       OverflowMenuEntry(
         icon: Icons.search_rounded,
-        label: 'Search & Privacy',
+        label: l?.menuSearchPrivacy ?? 'Search & Privacy',
         onTap: () => unawaited(openSection(SettingsSection.search)),
       ),
       OverflowMenuEntry(
         icon: Icons.tune_rounded,
-        label: 'Sniffer',
+        label: l?.menuSniffer ?? 'Sniffer',
         onTap: () => unawaited(openSection(SettingsSection.sniffer)),
       ),
       // 3. Customization & Profiles
       OverflowMenuEntry(
         icon: Icons.palette_outlined,
-        label: 'Theme',
+        label: l?.menuTheme ?? 'Theme',
         onTap: () => unawaited(openSection(SettingsSection.appearance)),
       ),
       OverflowMenuEntry(
         icon: Icons.people_outline_rounded,
-        label: 'Profiles',
+        label: l?.menuProfiles ?? 'Profiles',
         onTap: () => unawaited(openSection(SettingsSection.profiles)),
       ),
       OverflowMenuEntry(
         icon: Icons.open_in_new_rounded,
-        label: 'External apps',
+        label: l?.menuExternalApps ?? 'External apps',
         onTap: () => unawaited(openSection(SettingsSection.externalApps)),
       ),
       // 4. Sync & Backup
       OverflowMenuEntry(
         icon: Icons.backup_rounded,
-        label: 'Backup',
+        label: l?.menuBackup ?? 'Backup',
         onTap: () => unawaited(openSection(SettingsSection.backup)),
       ),
       OverflowMenuEntry(
         icon: Icons.cloud_outlined,
-        label: 'WebDAV Backup',
+        label: l?.menuWebdavBackup ?? 'WebDAV Backup',
         onTap: () => unawaited(openSection(SettingsSection.webdav)),
       ),
       OverflowMenuEntry(
         icon: Icons.shield_outlined,
-        label: 'Private Vault',
+        label: l?.menuPrivateVault ?? 'Private Vault',
         onTap: () => unawaited(openSection(SettingsSection.vault)),
       ),
       // 5. Advanced & Automation
       OverflowMenuEntry(
         icon: Icons.auto_awesome,
-        label: 'Aurora Pro & Ultra',
+        label: l?.menuProUltra ?? 'Aurora Pro & Ultra',
         color: ac.accentAmber,
         onTap: () => unawaited(openSection(SettingsSection.pro)),
       ),
       OverflowMenuEntry(
         icon: Icons.rss_feed,
-        label: 'Aurora Watcher',
+        label: l?.menuWatcher ?? 'Aurora Watcher',
         onTap: () => unawaited(openSection(SettingsSection.watcher)),
       ),
       OverflowMenuEntry(
         icon: Icons.api,
-        label: 'Automation API',
+        label: l?.menuAutomationApi ?? 'Automation API',
         onTap: () => unawaited(openSection(SettingsSection.automation)),
       ),
       // 6. Help & Info
       OverflowMenuEntry(
         icon: Icons.menu_book_rounded,
-        label: 'User Guide',
+        label: l?.menuUserGuide ?? 'User Guide',
         color: ac.accentFrost,
         onTap: () => unawaited(openSection(SettingsSection.userGuide)),
       ),
       OverflowMenuEntry(
         icon: Icons.info_outline_rounded,
-        label: 'About',
+        label: l?.menuAbout ?? 'About',
         onTap: () => unawaited(openSection(SettingsSection.about)),
       ),
     ];
@@ -3982,23 +3990,24 @@ class _SnifferScreenState extends State<SnifferScreen>
             ? Icons.security_rounded
             : Icons.security_outlined,
         label: settings.cloudflareStealthEnabled
-            ? 'Stealth Mode: On'
-            : 'Stealth Mode: Off',
+            ? (l?.toolStealthOn ?? 'Stealth Mode: On')
+            : (l?.toolStealthOff ?? 'Stealth Mode: Off'),
         color: settings.cloudflareStealthEnabled
             ? ac.accentFrost
             : ac.textPrimary,
-
         onTap: _toggleStealthMode,
       ),
       OverflowMenuEntry(
         icon: _privateMode ? Icons.security_rounded : Icons.shield_outlined,
-        label: _privateMode ? 'Incognito: On' : 'Incognito: Off',
+        label: _privateMode
+            ? (l?.toolIncognitoOn ?? 'Incognito: On')
+            : (l?.toolIncognitoOff ?? 'Incognito: Off'),
         color: _privateMode ? Colors.purpleAccent : ac.textPrimary,
         onTap: _toggleIncognitoMode,
       ),
       OverflowMenuEntry(
         icon: Icons.tab_rounded,
-        label: 'Open in Custom Tab',
+        label: l?.toolCustomTab ?? 'Open in Custom Tab',
         color: ac.accentFrost,
         onTap: () {
           final url = _activeTab.currentUrl;
@@ -4009,38 +4018,38 @@ class _SnifferScreenState extends State<SnifferScreen>
       ),
       OverflowMenuEntry(
         icon: Icons.history_rounded,
-        label: 'History',
+        label: l?.toolHistory ?? 'History',
         onTap: _showHistorySheet,
       ),
       OverflowMenuEntry(
         icon: Icons.star_rounded,
-        label: 'Favorites',
+        label: l?.toolFavorites ?? 'Favorites',
         color: ac.accentAmber,
         onTap: _showFavoritesSheet,
       ),
       OverflowMenuEntry(
         icon: Icons.offline_pin_rounded,
-        label: 'Saved pages',
+        label: l?.toolSavedPages ?? 'Saved pages',
         onTap: _showSavedPagesSheet,
       ),
       OverflowMenuEntry(
         icon: Icons.save_alt_rounded,
-        label: 'Save page',
+        label: l?.toolSavePage ?? 'Save page',
         onTap: () => unawaited(_saveCurrentPage()),
       ),
       OverflowMenuEntry(
         icon: Icons.find_in_page_rounded,
-        label: 'Find on page',
+        label: l?.toolFindOnPage ?? 'Find on page',
         onTap: () => setState(() => _findVisible = true),
       ),
       OverflowMenuEntry(
         icon: Icons.assignment_ind_rounded,
-        label: 'Autofill',
+        label: l?.toolAutofill ?? 'Autofill',
         onTap: () => unawaited(_showAutofillMenu()),
       ),
       OverflowMenuEntry(
         icon: Icons.chrome_reader_mode_rounded,
-        label: 'Reader mode',
+        label: l?.toolReaderMode ?? 'Reader mode',
         onTap: () => unawaited(_showReaderMode()),
       ),
       OverflowMenuEntry(
@@ -4048,8 +4057,10 @@ class _SnifferScreenState extends State<SnifferScreen>
             ? Icons.shield
             : (isAllowlisted ? Icons.shield_outlined : Icons.shield),
         label: !settings.adblockEnabled
-            ? 'Adblock: Off'
-            : (isAllowlisted ? 'Ads allowed' : 'Adblock: On'),
+            ? (l?.toolAdblockOff ?? 'Adblock: Off')
+            : (isAllowlisted
+                ? (l?.toolAdsAllowed ?? 'Ads allowed')
+                : (l?.toolAdblockOn ?? 'Adblock: On')),
         color: !settings.adblockEnabled
             ? Colors.redAccent
             : (isAllowlisted ? ac.textSecondary : Colors.green),
@@ -4057,28 +4068,28 @@ class _SnifferScreenState extends State<SnifferScreen>
       ),
       OverflowMenuEntry(
         icon: Icons.ads_click,
-        label: 'Block element',
+        label: l?.toolBlockElement ?? 'Block element',
         onTap: () => unawaited(_startElementPicker()),
       ),
       OverflowMenuEntry(
         icon: Icons.undo,
-        label: 'Reset blocks',
+        label: l?.toolResetBlocks ?? 'Reset blocks',
         onTap: _resetPageElementBlocks,
       ),
       OverflowMenuEntry(
         icon: Icons.refresh_rounded,
-        label: 'Re-scan media',
+        label: l?.toolRescanMedia ?? 'Re-scan media',
         onTap: () => unawaited(_rescanPageMedia()),
       ),
       OverflowMenuEntry(
         icon: Icons.playlist_add_rounded,
-        label: 'Download all on this page',
+        label: l?.toolBatchDownload ?? 'Download all on this page',
         color: ac.accentFrost,
         onTap: () => unawaited(_runListingBatchDownload()),
       ),
       OverflowMenuEntry(
         icon: Icons.cookie_rounded,
-        label: 'Clear cookies',
+        label: l?.toolClearCookies ?? 'Clear cookies',
         color: Colors.redAccent,
         onTap: () {
           unawaited(
@@ -5061,7 +5072,7 @@ class _SnifferScreenState extends State<SnifferScreen>
               if (_autofillProfiles.isEmpty)
                 ListTile(
                   leading: const Icon(Icons.info_outline),
-                  title: const Text('No profiles yet'),
+                  title: Text(AppLocalizations.of(context)!.snifferProfilesTitle),
                   subtitle: const Text(
                     'Add one via Settings → Autofill to begin',
                   ),
@@ -5091,7 +5102,7 @@ class _SnifferScreenState extends State<SnifferScreen>
                   ),
               ListTile(
                 leading: const Icon(Icons.add),
-                title: const Text('New profile'),
+                title: Text(AppLocalizations.of(context)!.snifferNewProfileTitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   unawaited(_editAutofillProfile(null));
@@ -5205,7 +5216,7 @@ class _SnifferScreenState extends State<SnifferScreen>
         margin: EdgeInsets.only(bottom: bottomMargin, left: 16, right: 16),
         duration: const Duration(seconds: 30),
         dismissDirection: DismissDirection.up,
-        action: SnackBarAction(label: 'Cancel', onPressed: onCancel),
+        action: SnackBarAction(label: AppLocalizations.of(context)!.snifferCancelLabel, onPressed: onCancel),
       ),
     );
   }
