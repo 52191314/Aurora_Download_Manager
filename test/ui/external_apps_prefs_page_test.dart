@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
+import 'package:aurora_downloader/l10n/app_localizations.dart';
 import 'package:aurora_downloader/sniffer/external_app_preference_store.dart';
 import 'package:aurora_downloader/theme/aurora_palette.dart';
 import 'package:aurora_downloader/theme/aurora_tokens.dart';
@@ -28,7 +29,11 @@ class MockPathProviderPlatform extends PathProviderPlatform
 
 /// Wraps the page in the minimum tree it needs: a MaterialApp for routing and
 /// ScaffoldMessenger, plus the AuroraPalette that `context.ac` asserts on.
+/// Localization delegates mirror the real app so pages using
+/// AppLocalizations.of(context) resolve.
 Widget _host() => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: AuroraPalette(
         colors: AColors.dark(),
         isLight: false,
