@@ -1,0 +1,1 @@
+1.1.1 — HLS playlist fetch limiting, one-time size probe, batch salvage actions (force merge / re-sniff / clear errors), range selection, batch duplicate handling, full French localization, and a new app language selector.
