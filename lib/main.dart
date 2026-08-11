@@ -22,6 +22,7 @@ import 'sniffer/sniffer_screen.dart';
 import 'sniffer/sniffer_url_utils.dart';
 import 'ui/donate_sheet.dart';
 import 'theme/aurora_glass_background.dart';
+import 'theme/aurora_palette.dart';
 import 'theme/aurora_theme.dart';
 import 'theme/aurora_tokens.dart';
 import 'ui/pages/queue_page.dart';
