@@ -43,4 +43,51 @@ void main() {
       );
     });
   });
+
+  group('protocol-relative media URLs', () {
+    test('extracts protocol-relative direct URL and resolves to https', () {
+      const html = '''
+        <html><body>
+          <video src="//cdn.example.com/clips/1200.mp4"></video>
+        </body></html>
+      ''';
+
+      final results = NativeHtmlMediaExtractor.parseHtmlForMedia(html);
+      expect(results, ['https://cdn.example.com/clips/1200.mp4']);
+    });
+
+    test('extracts protocol-relative m3u8 with query', () {
+      const html = '''
+        <script>var u = "//hls.example.com/live/720.m3u8?token=abc123";</script>
+      ''';
+
+      final results = NativeHtmlMediaExtractor.parseHtmlForMedia(html);
+      expect(
+        results,
+        ['https://hls.example.com/live/720.m3u8?token=abc123'],
+      );
+    });
+
+    test('extracts protocol-relative JSON-escaped URL', () {
+      const html = r'''
+        <script>
+          var config = {"url":"\/\/cdn.example.com\/clips\/1200.m3u8"};
+        </script>
+      ''';
+
+      final results = NativeHtmlMediaExtractor.parseHtmlForMedia(html);
+      expect(results, ['https://cdn.example.com/clips/1200.m3u8']);
+    });
+
+    test('extracts escaped absolute URL with protocol-relative form unchanged', () {
+      const html = r'''
+        <script>
+          var config = {"url":"https:\/\/cdn.example.com\/clips\/1200.mp4"};
+        </script>
+      ''';
+
+      final results = NativeHtmlMediaExtractor.parseHtmlForMedia(html);
+      expect(results, ['https://cdn.example.com/clips/1200.mp4']);
+    });
+  });
 }
