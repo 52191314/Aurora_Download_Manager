@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../downloader/downloader.dart';
 import '../../downloader/download_rules.dart';
+import '../../l10n/app_localizations.dart';
 import '../../platform/public_downloads_service.dart';
 import '../../platform/download_foreground_service.dart';
 import '../../sniffer/browser_library.dart';
@@ -1085,15 +1086,39 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildAppearancePage() {
     var localPref = _settings.darkModePreference;
+    final l = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Appearance')),
+      appBar: AppBar(title: Text(l?.pageTitleTheme ?? 'Appearance & Theme')),
       body: StatefulBuilder(
         builder: (context, setLocal) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            PanelHeader(icon: Icons.palette_outlined, title: 'Appearance'),
+            PanelHeader(icon: Icons.palette_outlined, title: l?.lblAppearanceHeader ?? 'Appearance'),
             const SizedBox(height: 8),
             Panel(child: Column(children: [
+              DropdownButtonFormField<String>(
+                value: _settings.appLanguageCode,
+                decoration: InputDecoration(
+                  labelText: l?.settingsLanguage ?? 'App language',
+                  helperText: l?.settingsLanguageDesc ??
+                      'Choose display language for Aurora Downloader interface',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                items: kAppSupportedLanguages
+                    .map((lang) => DropdownMenuItem(
+                          value: lang.code,
+                          child: Text(lang.name),
+                        ))
+                    .toList(),
+                onChanged: (langCode) {
+                  if (langCode == null) return;
+                  setLocal(() {});
+                  _update(_settings.copyWith(appLanguageCode: langCode));
+                },
+              ),
+              const SizedBox(height: 16),
               DropdownButtonFormField<DarkModePreference>(
                 value: localPref,
                 decoration: InputDecoration(

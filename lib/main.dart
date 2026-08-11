@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dev/screenshot_fixtures.dart';
 import 'downloader/download_rules.dart';
 import 'downloader/downloader.dart';
+import 'l10n/app_localizations.dart';
 import 'notifications/download_notification_service.dart';
 import 'platform/download_foreground_service.dart';
 import 'platform/public_downloads_service.dart';
@@ -34,7 +35,6 @@ import 'premium/ffmpeg/ffmpeg_module_loader.dart';
 import 'premium/pro_entitlement.dart';
 import 'premium/pro_features.dart';
 import 'premium/oss_upsell.dart';
-import 'premium/turbo_policy.dart';
 import 'premium/send_to_pc_sheet.dart';
 import 'premium/audio_extract_platform.dart';
 import 'premium/phase2_caps.dart';
@@ -59,19 +59,20 @@ const _snifferDownloadUserAgent =
 
 /// Top-level notifier for the app theme mode.  Updated by [_AuroraHomeState]
 /// whenever the user changes [DownloadSettings.darkModePreference].
-final ValueNotifier<ThemeMode> appThemeModeNotifier =
-    ValueNotifier(ThemeMode.system);
+final ValueNotifier<ThemeMode> appThemeModeNotifier = ValueNotifier(
+  ThemeMode.system,
+);
 
 /// Top-level notifier for OLED-optimised pure-black dark mode.
 /// Set to `true` when [DarkModePreference.forced] is active (the setting
 /// is labelled "Dark (OLED black)" in the UI).
 final ValueNotifier<bool> appOledDarkNotifier = ValueNotifier(false);
 
-enum BatteryOptChoice {
-  openSettings,
-  later,
-  neverAskAgain,
-}
+/// Top-level notifier for the app display language (locale).
+/// Updated by [_AuroraHomeState] whenever the user changes [DownloadSettings.appLanguageCode].
+final ValueNotifier<Locale?> appLocaleNotifier = ValueNotifier(null);
+
+enum BatteryOptChoice { openSettings, later, neverAskAgain }
 
 void main() {
   // Global error handlers: catch any uncaught Dart/async errors so a single
@@ -180,10 +181,12 @@ class MyApp extends StatelessWidget {
         appThemeModeNotifier,
         appOledDarkNotifier,
         appAccentPackNotifier,
+        appLocaleNotifier,
       ]),
       builder: (context, _) {
         final mode = appThemeModeNotifier.value;
         final isOled = appOledDarkNotifier.value;
+        final locale = appLocaleNotifier.value;
         // Accent packs must paint both Material ThemeData (sliders, nav,
         // progress) and the AuroraPalette InheritedWidget.  Build both
         // palettes once so light/dark ThemeData stay consistent with
@@ -194,6 +197,9 @@ class MyApp extends StatelessWidget {
           title: 'Aurora Downloader',
           debugShowCheckedModeBanner: false,
           navigatorKey: FeatureModuleLoader.navigatorKey,
+          locale: locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           themeMode: mode,
           theme: buildLightTheme(colors: lightColors),
           // OLED black: only when the user explicitly selected
@@ -205,8 +211,7 @@ class MyApp extends StatelessWidget {
           // dark for the palette while Material goes light (or vice
           // versa). That dual-source mismatch inverted text/surfaces.
           builder: (ctx, child) {
-            final isLight =
-                Theme.of(ctx).brightness == Brightness.light;
+            final isLight = Theme.of(ctx).brightness == Brightness.light;
             return AuroraTheme(
               isLight: isLight,
               paletteOverride: isLight ? lightColors : darkColors,
@@ -229,8 +234,6 @@ class MyApp extends StatelessWidget {
     return colorsForAccentPack(activeAccentPack(), isLight: isLight);
   }
 }
-
-
 
 class AuroraHome extends StatefulWidget {
   final SnifferBrowserController? browserController;
@@ -288,49 +291,52 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     // Steps 1–2 stay on Queue so shell dock keys stay mounted.
     // Steps 3–5 switch to Browser so primary-bar keys (sniffer / tabs / ⋯) exist.
     // No Queue-tab spotlight: that icon only exists on the Queue shell bar.
+    final l = AppLocalizations.of(context);
     OnboardingSpotlightOverlay.show(
       context,
       steps: [
         SpotlightStep(
           targetKey: _urlInputKey,
-          title: 'Link & URL Input',
+          title: l?.onboardingStep1Title ?? 'Link & URL Input',
           description:
+              l?.onboardingStep1Desc ??
               'Paste media URLs or stream links here to start a download without opening the browser.',
           icon: Icons.link_rounded,
           onStepEntered: () => _selectTab(0),
         ),
         SpotlightStep(
           targetKey: _browserTabKey,
-          title: 'Media Sniffer Browser',
+          title: l?.onboardingStep2Title ?? 'Media Sniffer Browser',
           description:
+              l?.onboardingStep2Desc ??
               'Open the built-in browser to browse sites and auto-detect streams, HLS playlists, and audio.',
           icon: Icons.language_rounded,
           onStepEntered: () => _selectTab(0),
         ),
         SpotlightStep(
           targetKey: _browserSnifferKey,
-          title: 'Sniffed Media (Radar)',
+          title: l?.onboardingStep3Title ?? 'Sniffed Media (Radar)',
           description:
-              'When the radar lights up, tap it to review detected media and add items to the queue. '
-              'Queue is left of Radar; bookmarks list is on the right. '
-              'Use the star in the address bar to save the current page.',
+              l?.onboardingStep3Desc ??
+              'When the radar lights up, tap it to review detected media and add items to the queue.',
           icon: Icons.radar,
           onStepEntered: () => _selectTab(1),
         ),
         SpotlightStep(
           targetKey: _browserTabsKey,
-          title: 'Browser Tabs',
+          title: l?.onboardingStep4Title ?? 'Browser Tabs',
           description:
+              l?.onboardingStep4Desc ??
               'Manage multiple pages at once — open, switch, or close tabs from this control.',
           icon: Icons.tab_rounded,
           onStepEntered: () => _selectTab(1),
         ),
         SpotlightStep(
           targetKey: _browserMenuKey,
-          title: 'Menu Popup (⋯)',
+          title: l?.onboardingStep5Title ?? 'Menu Popup (⋯)',
           description:
-              'Opens Settings and Tools. Important destinations: User Guide, Adblock, Download Rules, '
-              'Private Vault, Profiles, WebDAV Backup, Aurora Watcher, History, and Favorites.',
+              l?.onboardingStep5Desc ??
+              'Opens Settings and Tools. Important destinations: User Guide, Adblock, Download Rules, Private Vault, and WebDAV Backup.',
           icon: Icons.more_vert_rounded,
           onStepEntered: () => _selectTab(1),
         ),
@@ -341,6 +347,141 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
         _permissionPromptsAllowed = true;
         unawaited(_requestPostOnboardingPermissions());
         _scheduleDonationPrompt();
+      },
+    );
+  }
+
+  /// Displays the first-launch language selector dialog before the onboarding tour.
+  /// Pre-selects the user's detected system language by default.
+  Future<void> _showFirstLaunchLanguageSheetIfNeeded() async {
+    if (!mounted) return;
+    String selectedCode = _settings.appLanguageCode;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final ac = context.ac;
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final l = AppLocalizations.of(dialogCtx);
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: ac.accentFrost.withValues(alpha: 0.3)),
+              ),
+              title: Row(
+                children: [
+                  Icon(Icons.language_rounded, color: ac.accentFrost, size: 24),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      l?.onboardingWelcomeTitle ?? 'App Language',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l?.onboardingWelcomeDesc ??
+                            'Select your display language for Aurora Downloader interface:',
+                        style: const TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ...kAppSupportedLanguages.map((lang) {
+                        final isSelected = selectedCode == lang.code;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? ac.accentFrost.withValues(alpha: 0.15)
+                                : const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isSelected
+                                  ? ac.accentFrost
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 2,
+                            ),
+                            leading: Icon(
+                              isSelected
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_off,
+                              color: isSelected
+                                  ? ac.accentFrost
+                                  : const Color(0xFF64748B),
+                              size: 20,
+                            ),
+                            title: Text(
+                              lang.name,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : const Color(0xFFCBD5E1),
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                fontSize: 14,
+                              ),
+                            ),
+                            onTap: () {
+                              setDialogState(() => selectedCode = lang.code);
+                              _updateSettings(
+                                _settings.copyWith(appLanguageCode: lang.code),
+                              );
+                            },
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: ac.accentFrost,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      l?.onboardingContinue ?? 'Continue',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
       },
     );
   }
@@ -500,7 +641,9 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       if (prevState != task.state) {
         _prevTaskStates[task.id] = task.state;
         if (!_isDisposed) {
-          debugPrint('Task "$fileName": ${prevState?.name ?? "new"} → ${task.state.name}');
+          debugPrint(
+            'Task "$fileName": ${prevState?.name ?? "new"} → ${task.state.name}',
+          );
         }
         // Prune terminal tasks so the map stays bounded over a long session
         // (optimization research 2026-08-07, P13).
@@ -535,6 +678,8 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       debugPrint('[OnboardingCheck] shouldAutoShowTour=$showTour');
       if (showTour) {
         // Keep _permissionPromptsAllowed false for the whole tour.
+        await _showFirstLaunchLanguageSheetIfNeeded();
+        if (!mounted) return;
         _showOnboardingSpotlight();
         return;
       }
@@ -724,7 +869,8 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(BatteryOptChoice.neverAskAgain),
+            onPressed: () =>
+                Navigator.of(ctx).pop(BatteryOptChoice.neverAskAgain),
             child: const Text('Never ask again'),
           ),
           TextButton(
@@ -732,7 +878,8 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
             child: const Text('Later'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(BatteryOptChoice.openSettings),
+            onPressed: () =>
+                Navigator.of(ctx).pop(BatteryOptChoice.openSettings),
             child: const Text('Open settings'),
           ),
         ],
@@ -823,9 +970,7 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
           onSpeedLimitChanged: (value) {
             setState(() => _speedLimitKbps = value);
             _downloadQueue.setSpeedLimit(value.round());
-            TorrentDownloader.setNativeDownloadLimit(
-              (value * 1024).round(),
-            );
+            TorrentDownloader.setNativeDownloadLimit((value * 1024).round());
           },
         ),
       ),
@@ -868,7 +1013,9 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       debugPrint(
         '[AuroraHome] App backgrounded, active downloads: ${_downloadQueue.activeTasks.length}',
       );
-      debugPrint('App backgrounded, active downloads: ${_downloadQueue.activeTasks.length}');
+      debugPrint(
+        'App backgrounded, active downloads: ${_downloadQueue.activeTasks.length}',
+      );
       // Pause browser WebViews to free resources for background downloads.
       unawaited(_browserController.pauseAllWebViews());
       // Force-sync the foreground service so Android sees the persistent
@@ -948,9 +1095,8 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
                         );
                       },
                       onPauseTask: (task) =>
-                          () => unawaited(
-                            _downloadQueue.pauseTaskAsync(task.id),
-                          ),
+                          () =>
+                              unawaited(_downloadQueue.pauseTaskAsync(task.id)),
                       onResumeTask: (task) =>
                           () => unawaited(
                             _downloadQueue.resumeTaskAsync(task.id),
@@ -1031,9 +1177,9 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
   Future<void> _checkClipboardForUrl() async {
     // Gate: Pro+ only; free never sees clipboard listener.
     if (!ProFeatures.allows(
-          ProFeature.clipboardCatch,
-          proUpsellEntitlement?.tier ?? EntitlementTier.free,
-        )) {
+      ProFeature.clipboardCatch,
+      proUpsellEntitlement?.tier ?? EntitlementTier.free,
+    )) {
       return;
     }
     try {
@@ -1156,7 +1302,8 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
         mediaType: resolved.contentType,
         pageHost: uri.host,
       );
-      if (matchedRule?.renameTemplate != null && matchedRule!.renameTemplate!.isNotEmpty) {
+      if (matchedRule?.renameTemplate != null &&
+          matchedRule!.renameTemplate!.isNotEmpty) {
         fileName = _ruleEngine!.applyRename(matchedRule, fileName);
       }
       final ruleDest = _ruleEngine!.getDestinationFolder(matchedRule);
@@ -1246,9 +1393,11 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
 
     void publish() {
       if (!mounted) return;
-      debugPrint('browserOpenRequestBus.request("$trimmed") '
+      debugPrint(
+        'browserOpenRequestBus.request("$trimmed") '
         '(firstVisit=$firstVisitToBrowser, browserMounted='
-        '${_visitedMainTabs.contains(1)})');
+        '${_visitedMainTabs.contains(1)})',
+      );
       // Primary path: ChangeNotifier bus → SnifferScreen listener.
       _browserOpenRequestBus.request(trimmed);
       // Fallback if bus listener was not yet attached (first frame after
@@ -1378,12 +1527,12 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       }
     });
     final target = task.sourcePageUrl ?? task.url;
-    debugPrint('_resniffManual: target="$target", sourcePageUrl=${task.sourcePageUrl}');
+    debugPrint(
+      '_resniffManual: target="$target", sourcePageUrl=${task.sourcePageUrl}',
+    );
     _openUrlInBrowserAfterTabReady(target);
     if (mounted) {
-      _showSnack(
-        'Source page opened. Tap the media to refresh the link.',
-      );
+      _showSnack('Source page opened. Tap the media to refresh the link.');
     }
   }
 
@@ -1569,20 +1718,27 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     unawaited(_autoBackupService.configure(settings));
     _downloadQueue.wifiOnly = settings.wifiOnly;
     // Dual clamp order: userSetting → tierMax → engineHardMax.
-    final tierClampedConcurrent = settings.maxConcurrentDownloads
-        .clamp(1, ProFeatures.maxConcurrentFor(tier));
-    final tierClampedChunks = settings.chunksPerTask
-        .clamp(1, ProFeatures.chunksFor(tier));
-    // P3 Turbo: Pro+ with turboEngine active drives the engine to the tier
-    // maximum instead of the (possibly conservative) user setting.
-    final effectiveConcurrent = TurboPolicy.resolveConcurrent(
-      tierClampedConcurrent,
-      tier,
-    ).clamp(1, DownloadQueue.engineHardMaxConcurrent);
-    final effectiveChunks = TurboPolicy.resolveChunks(
-      tierClampedChunks,
-      tier,
-    ).clamp(1, DownloadQueue.engineHardMaxChunks);
+    final tierClampedConcurrent = settings.maxConcurrentDownloads.clamp(
+      1,
+      ProFeatures.maxConcurrentFor(tier),
+    );
+    final tierClampedChunks = settings.chunksPerTask.clamp(
+      1,
+      ProFeatures.chunksFor(tier),
+    );
+    // The user's explicit settings are authoritative. Turbo previously
+    // overrode them to the tier max for Pro+ (a user-set 4 silently became
+    // 64 concurrent downloads, starving every task to 0 KB/s). Removed
+    // 2026-08-11; if tier-max throughput is wanted again it must be an
+    // explicit opt-in toggle, not a silent override.
+    final effectiveConcurrent = tierClampedConcurrent.clamp(
+      1,
+      DownloadQueue.engineHardMaxConcurrent,
+    );
+    final effectiveChunks = tierClampedChunks.clamp(
+      1,
+      DownloadQueue.engineHardMaxChunks,
+    );
     _downloadQueue.configure(
       maxConcurrentDownloads: effectiveConcurrent,
       numChunksPerTask: effectiveChunks,
@@ -1622,9 +1778,7 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
         settings.proxyPassword,
       );
     } else {
-      _downloadQueue.applyProxySettings(
-        ProxyType.none, '', 0, '', '',
-      );
+      _downloadQueue.applyProxySettings(ProxyType.none, '', 0, '', '');
     }
     // Update the app theme mode and OLED-dark flag based on the user's
     // preference.  "Dark (OLED black)" → forced → OLED pure black.
@@ -1633,6 +1787,12 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     );
     appOledDarkNotifier.value =
         settings.darkModePreference == DarkModePreference.forced;
+    appLocaleNotifier.value = _localeFromLanguageCode(settings.appLanguageCode);
+  }
+
+  static Locale? _localeFromLanguageCode(String code) {
+    if (code == 'system' || code.isEmpty) return null;
+    return Locale(code);
   }
 
   /// Maps [DarkModePreference] to the Flutter [ThemeMode] used by MaterialApp.
@@ -1766,19 +1926,13 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       final source = await _resolvedCompletedSource(task);
       if (source == null || !source.startsWith('/')) {
         if (!mounted) return;
-        _showSnack(
-          'Couldn’t send — the file isn’t available locally yet.',
-        );
+        _showSnack('Couldn’t send — the file isn’t available locally yet.');
         return;
       }
       final tier = _proEntitlement.tier;
       final ctx = context;
       if (!mounted) return;
-      await SendToPcSheet.show(
-        ctx,
-        filePaths: [source],
-        tier: tier,
-      );
+      await SendToPcSheet.show(ctx, filePaths: [source], tier: tier);
     } catch (error) {
       if (!mounted) return;
       _showSnack('Couldn’t start Send to PC. $error');
@@ -1882,9 +2036,6 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     BuildContext context,
     String filename,
   ) {
-    return showDuplicateDownloadDialog(
-      context: context,
-      filename: filename,
-    );
+    return showDuplicateDownloadDialog(context: context, filename: filename);
   }
 }
