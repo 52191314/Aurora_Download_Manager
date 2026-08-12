@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:aurora_downloader/theme/aurora_palette.dart';
 
 import 'engine_factory.dart';
+import 'mini_player_controller.dart';
 import 'playback_engine.dart';
 import 'playback_source.dart';
 import 'playback_state.dart';
@@ -47,6 +48,7 @@ class AuroraPlayerScreen extends StatefulWidget {
     super.key,
     required this.source,
     required this.initialEngine,
+    this.adoptEngine,
     this.onDownload,
     this.onFavorite,
     this.onEnginePreferenceChanged,
@@ -55,6 +57,13 @@ class AuroraPlayerScreen extends StatefulWidget {
 
   final PlaybackSource source;
   final PlaybackEngineKind initialEngine;
+
+  /// When provided, the screen *borrows* this already-playing engine instead
+  /// of creating one (mini-player expand). The engine stays owned by its
+  /// creator ([MiniPlayerController]) — popping this route never disposes it,
+  /// and the source is not re-opened (it is already playing). `initialEngine`
+  /// is ignored in this mode in favor of the engine's own kind.
+  final PlaybackEngine? adoptEngine;
 
   /// Pops the route with `'download'`.
   final VoidCallback? onDownload;
@@ -76,6 +85,12 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
   late PlaybackEngineKind _engineKind;
   late PlaybackEngine _engine;
   late PlaybackSource _source;
+
+  /// False when the engine was handed in via [AuroraPlayerScreen.adoptEngine]
+  /// (mini-player expand) or handed out to the [MiniPlayerController] on PIP
+  /// exit — in both cases the engine outlives this route and must not be
+  /// disposed here.
+  late bool _ownsEngine;
 
   bool _controlsVisible = true;
   bool _showDiagnostics = false;
@@ -110,7 +125,6 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
       MethodChannel('aurora_downloader/pip');
 
   bool _inPip = false;
-  bool _pipSupported = false;
 
   // --- Lock / orientation ---
   bool _locked = false;
@@ -139,10 +153,16 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _engineKind = widget.initialEngine;
+    final adopted = widget.adoptEngine;
+    _ownsEngine = adopted == null;
+    _engineKind = adopted?.kind ?? widget.initialEngine;
+    _engine = adopted ?? createPlaybackEngine(_engineKind);
     _source = widget.source;
-    _engine = createPlaybackEngine(_engineKind);
-    unawaited(_engine.open(_source));
+    // A borrowed engine is already playing — re-opening the source would
+    // rebuffer and drop the position.
+    if (_ownsEngine) {
+      unawaited(_engine.open(_source));
+    }
     _restartAutoHide();
     _setKeepScreenOn(true);
     _initPip();
@@ -176,32 +196,31 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
     _pipChannel.setMethodCallHandler((call) async {
       if (call.method != 'onPipModeChanged') return;
       final inPip = call.arguments as bool? ?? false;
+      final exitingPip = _inPip && !inPip;
       if (!mounted) return;
       setState(() {
         _inPip = inPip;
         // Aurora's chrome must never paint into the PiP window.
         if (inPip) _controlsVisible = false;
       });
+      if (exitingPip) {
+        // The PIP window was tapped (or dismissed) — Android always exits
+        // system PIP when the window is tapped. Instead of expanding back
+        // into this fullscreen player, hand the engine to the floating
+        // mini-player and pop back to the Browser so the video keeps
+        // playing while the user browses.
+        _handOffToMiniPlayer();
+      }
     });
-    try {
-      final supported =
-          await _pipChannel.invokeMethod<bool>('isPipSupported') ?? false;
-      if (mounted) setState(() => _pipSupported = supported);
-    } catch (_) {
-      // Leave the button hidden rather than offering something that no-ops.
-    }
   }
 
-  Future<void> _enterPip() async {
-    final size = _engine.state.value.videoSize;
-    try {
-      await _pipChannel.invokeMethod('enterPip', {
-        'width': size.width > 0 ? size.width.toInt() : 16,
-        'height': size.height > 0 ? size.height.toInt() : 9,
-      });
-    } catch (_) {
-      // Denied by the system (permission off, unsupported form factor).
-    }
+  /// Transfers the running engine to [MiniPlayerController] and pops this
+  /// route. The engine is not disposed — the mini-player overlay renders it.
+  void _handOffToMiniPlayer() {
+    if (!mounted) return;
+    MiniPlayerController.instance.adopt(_engine, _source);
+    _ownsEngine = false;
+    Navigator.of(context).maybePop();
   }
 
   @override
@@ -221,7 +240,9 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
     // Hand the display back before the route goes — a stuck KEEP_SCREEN_ON
     // flag would outlive the player and drain the battery silently.
     unawaited(_setKeepScreenOn(false));
-    unawaited(_engine.dispose());
+    if (_ownsEngine) {
+      unawaited(_engine.dispose());
+    }
     unawaited(SystemChrome.setPreferredOrientations(DeviceOrientation.values));
     super.dispose();
   }
@@ -417,6 +438,9 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
   /// the stack that is failing it.
   Future<void> _switchEngine(PlaybackEngineKind next) async {
     if (next == _engineKind) return;
+    // A borrowed engine (mini-player expand) belongs to the controller —
+    // replacing it here would kill the video the mini-player is still owed.
+    if (!_ownsEngine) return;
     final resumeAt = _engine.state.value.position;
     final old = _engine;
 
@@ -575,7 +599,11 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
                   state: state,
                   engineKind: _engineKind,
                   onRetry: _retry,
-                  onSwitchEngine: () => _switchEngine(_engineKind.other),
+                  // Borrowed engines can't be swapped (the mini-player still
+                  // owns them) — hide the escape hatch instead of no-oping it.
+                  onSwitchEngine: _ownsEngine
+                      ? () => _switchEngine(_engineKind.other)
+                      : null,
                 ),
               if (_controlsVisible && !_locked) ...[
                 _TopBar(
@@ -584,7 +612,7 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
                   favorited: _favorited,
                   landscapeForced: _landscapeForced,
                   onToggleOrientation: _toggleOrientation,
-                  onPip: _pipSupported ? _enterPip : null,
+                  onPip: _handOffToMiniPlayer,
                   onBack: () => Navigator.of(context).maybePop(),
                   onToggleDiagnostics: () =>
                       setState(() => _showDiagnostics = !_showDiagnostics),
@@ -647,13 +675,15 @@ class _Problem extends StatelessWidget {
     required this.state,
     required this.engineKind,
     required this.onRetry,
-    required this.onSwitchEngine,
+    this.onSwitchEngine,
   });
 
   final PlaybackState state;
   final PlaybackEngineKind engineKind;
   final VoidCallback onRetry;
-  final VoidCallback onSwitchEngine;
+
+  /// Null hides the engine-switch button (borrowed/mini-player engines).
+  final VoidCallback? onSwitchEngine;
 
   @override
   Widget build(BuildContext context) {
@@ -699,15 +729,16 @@ class _Problem extends StatelessWidget {
                       side: const BorderSide(color: Colors.white24),
                     ),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: onSwitchEngine,
-                    icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                    label: Text('Try ${engineKind.other.label}'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: ac.accentFrost,
-                      foregroundColor: Colors.black,
+                  if (onSwitchEngine != null)
+                    ElevatedButton.icon(
+                      onPressed: onSwitchEngine,
+                      icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                      label: Text('Try ${engineKind.other.label}'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: ac.accentFrost,
+                        foregroundColor: Colors.black,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],
@@ -831,7 +862,7 @@ class _TopBar extends StatelessWidget {
             ),
             if (onPip != null)
               _CompactIcon(
-                tooltip: 'Picture-in-picture',
+                tooltip: 'Mini player',
                 icon: Icons.picture_in_picture_alt_rounded,
                 onPressed: onPip!,
               ),

@@ -18,11 +18,11 @@ import 'package:flutter/material.dart';
 
 import 'package:aurora_downloader/downloader/downloader.dart';
 import 'package:aurora_downloader/platform/public_downloads_service.dart';
-import '../sheets/duplicate_download_dialog.dart';
 import 'package:aurora_downloader/sniffer/hls_playlist_cache_lookup.dart';
 import 'package:aurora_downloader/sniffer/models/browser_tab.dart';
 import 'package:aurora_downloader/sniffer/sniffer_url_utils.dart';
 import 'package:aurora_downloader/sniffer/token_refresh_service.dart';
+import 'package:aurora_downloader/sniffer/sheets/duplicate_download_dialog.dart';
 
 /// Trims a JSON-decoded value to a non-empty string, or returns `null`.
 String? _contextString(Object? value) {
@@ -92,6 +92,7 @@ void showElementContextMenu(
   required Future<void> Function(String url) onHandlePickedElement,
   required Future<void> Function(String value, String message) onCopyText,
   required void Function({String? url, bool switchToTab}) onOpenNewTab,
+  required Future<void> Function(String url) onOpenPreview,
   required Future<void> Function() onCopyCurrentUrl,
   required Future<void> Function() onToggleFavorite,
   required Future<void> Function() onSaveCurrentPage,
@@ -230,6 +231,11 @@ void showElementContextMenu(
 
       final linkActions = <Widget>[
         if (href != null) ...[
+          item(
+            Icons.visibility_outlined,
+            'Preview',
+            () => unawaited(onOpenPreview(href)),
+          ),
           item(Icons.open_in_browser, 'Open link', () => openTarget(href)),
           item(
             Icons.tab,

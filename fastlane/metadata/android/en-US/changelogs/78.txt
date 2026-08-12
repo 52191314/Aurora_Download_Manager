@@ -1,0 +1,5 @@
+Anti-tracking: tracking parameters (utm_*, fbclid and more) are stripped from links before pages load.
+Ad blocking stays fresh: filter lists update automatically and reliably, even on slower connections.
+Cookie banners and pop-ups are blocked by default.
+Settings now show when each filter list was last updated.
+Fixed a bug that could block legitimate sites instead of just stripping tracking parameters.
