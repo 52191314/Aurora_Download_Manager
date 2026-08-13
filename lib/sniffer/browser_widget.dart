@@ -1,8 +1,12 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'browser_controller.dart';
+import 'pull_to_refresh_tracker.dart';
 
-class BrowserWidget extends StatelessWidget {
+class BrowserWidget extends StatefulWidget {
   final SnifferBrowserController controller;
   final VoidCallback? onSwipeForward;
   final VoidCallback? onRefresh;
@@ -24,10 +28,58 @@ class BrowserWidget extends StatelessWidget {
   });
 
   @override
+  State<BrowserWidget> createState() => _BrowserWidgetState();
+}
+
+class _BrowserWidgetState extends State<BrowserWidget> {
+  /// Current pull-down distance (>= 0) while the user overscrolls at the top
+  /// of the page. Drives the pull-to-refresh indicator.
+  final ValueNotifier<double> _pullDistance = ValueNotifier<double>(0);
+
+  /// True while a refresh triggered by the pull gesture is in flight.
+  /// The indicator spins (indeterminate) until the reloaded page finishes
+  /// loading ([onLoadStop]).
+  final ValueNotifier<bool> _refreshing = ValueNotifier<bool>(false);
+
+  /// Pure overscroll state machine (see [PullToRefreshTracker]).
+  final PullToRefreshTracker _tracker = PullToRefreshTracker();
+
+  /// Android WebView reports negative `scrollY` while the user overscrolls
+  /// past the top of the page. The tracker accumulates the most-negative value
+  /// and, when the scroll springs back to >= 0 (finger released), reports
+  /// whether the pull crossed the threshold. Purely observational — no gesture
+  /// detector, so normal WebView scrolling is never affected.
+  void _handleScrollChanged(int y) {
+    if (_tracker.onScroll(y, refreshing: _refreshing.value)) {
+      _triggerRefresh();
+    }
+    _pullDistance.value = _tracker.pullDistance;
+  }
+
+  void _triggerRefresh() {
+    _refreshing.value = true;
+    widget.onRefresh?.call();
+  }
+
+  void _handleLoadStop() {
+    if (_refreshing.value) {
+      _refreshing.value = false;
+      _pullDistance.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pullDistance.dispose();
+    _refreshing.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final ctrl = controller;
+    final ctrl = widget.controller;
     if (ctrl is SnifferWebViewControllerImpl) {
-      final seed = initialUrl?.trim();
+      final seed = widget.initialUrl?.trim();
       final initialRequest = (seed != null &&
               seed.isNotEmpty &&
               seed != 'about:blank' &&
@@ -45,7 +97,7 @@ class BrowserWidget extends StatelessWidget {
             useOnDownloadStart: true,
             useShouldInterceptRequest: true,
             supportMultipleWindows: false,
-            userAgent: userAgent,
+            userAgent: widget.userAgent,
             applicationNameForUserAgent: '',
             // This WebView renders arbitrary untrusted pages. Neither flag has a
             // use case for a general-purpose browser, and both widen the blast
@@ -63,7 +115,10 @@ class BrowserWidget extends StatelessWidget {
           ),
           onWebViewCreated: (c) => ctrl.onWebViewCreated(c),
           onLoadStart: (c, url) => ctrl.onLoadStart(url),
-          onLoadStop: (c, url) => ctrl.onLoadStop(url),
+          onLoadStop: (c, url) {
+            ctrl.onLoadStop(url);
+            _handleLoadStop();
+          },
           onUpdateVisitedHistory: (c, url, isReload) =>
               ctrl.onUpdateVisitedHistory(url, isReload),
           onProgressChanged: (c, progress) => ctrl.onProgressChanged(progress),
@@ -72,15 +127,20 @@ class BrowserWidget extends StatelessWidget {
           onLoadResource: (c, resource) => ctrl.onLoadResource(resource),
           shouldInterceptRequest: (c, request) =>
               ctrl.shouldInterceptRequestCallback(request),
-          onScrollChanged: (c, x, y) => ctrl.onScrollChanged(x, y),
+          onScrollChanged: (c, x, y) {
+            ctrl.onScrollChanged(x, y);
+            _handleScrollChanged(y);
+          },
           onDownloadStartRequest: (c, request) =>
               ctrl.onDownloadStartRequestCallback(request),
           onReceivedError: (c, request, error) =>
               ctrl.onReceivedErrorCallback(request, error),
           onRenderProcessGone: (c, detail) => ctrl.onRenderProcessGone(),
         ),
-        onSwipeForward: onSwipeForward,
-        onRefresh: onRefresh,
+        onSwipeForward: widget.onSwipeForward,
+        onRefresh: widget.onRefresh,
+        pullDistance: _pullDistance,
+        refreshing: _refreshing,
       );
     } else {
       return _GestureWrappedWebView(
@@ -89,8 +149,10 @@ class BrowserWidget extends StatelessWidget {
           color: Colors.grey[200],
           child: const Center(child: Text('Mock WebView Placeholder')),
         ),
-        onSwipeForward: onSwipeForward,
-        onRefresh: onRefresh,
+        onSwipeForward: widget.onSwipeForward,
+        onRefresh: widget.onRefresh,
+        pullDistance: _pullDistance,
+        refreshing: _refreshing,
       );
     }
   }
@@ -100,11 +162,15 @@ class _GestureWrappedWebView extends StatefulWidget {
   final Widget webView;
   final VoidCallback? onSwipeForward;
   final VoidCallback? onRefresh;
+  final ValueListenable<double> pullDistance;
+  final ValueListenable<bool> refreshing;
 
   const _GestureWrappedWebView({
     required this.webView,
     this.onSwipeForward,
     this.onRefresh,
+    required this.pullDistance,
+    required this.refreshing,
   });
 
   @override
@@ -124,9 +190,29 @@ class _GestureWrappedWebViewState extends State<_GestureWrappedWebView> {
     // participates in Flutter's gesture arena and wins, preventing the
     // native WebView from ever seeing touches at the right edge.
     // The left edge is left unclaimed — system back gesture handles back.
+    // The pull-to-refresh indicator is visual-only (IgnorePointer) so it can
+    // never steal touches from the WebView.
     return Stack(
       children: [
         widget.webView,
+        // Pull-to-refresh indicator — top-center, follows the pull, never
+        // intercepts touches.
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: ListenableBuilder(
+              listenable: Listenable.merge(
+                [widget.pullDistance, widget.refreshing],
+              ),
+              builder: (context, _) => _PullToRefreshIndicator(
+                pullDistance: widget.pullDistance.value,
+                refreshing: widget.refreshing.value,
+              ),
+            ),
+          ),
+        ),
         // Right edge zone — swipe left → go forward
         Positioned(
           right: 0,
@@ -136,6 +222,50 @@ class _GestureWrappedWebViewState extends State<_GestureWrappedWebView> {
           child: _ForwardSwipeZone(onSwipe: widget.onSwipeForward),
         ),
       ],
+    );
+  }
+}
+
+/// Top-center circular indicator for the pull-to-refresh gesture.
+///
+/// While pulling, it fills proportionally to the pull distance and fades in;
+/// once the threshold is crossed and the finger released it spins
+/// indefinitely until the reloaded page finishes loading.
+class _PullToRefreshIndicator extends StatelessWidget {
+  final double pullDistance;
+  final bool refreshing;
+
+  const _PullToRefreshIndicator({
+    required this.pullDistance,
+    required this.refreshing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (pullDistance / kPullToRefreshThreshold).clamp(0.0, 1.0);
+    final opacity = refreshing
+        ? 1.0
+        : (pullDistance / (kPullToRefreshThreshold * 0.5)).clamp(0.0, 1.0);
+    final offsetY = refreshing
+        ? 20.0
+        : math.min(pullDistance * 0.5, kPullToRefreshThreshold * 0.4);
+
+    return Opacity(
+      opacity: opacity,
+      child: Transform.translate(
+        offset: Offset(0, offsetY),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              value: refreshing ? null : progress,
+              strokeWidth: 3,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

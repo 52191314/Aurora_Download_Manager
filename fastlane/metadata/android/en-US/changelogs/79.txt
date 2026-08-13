@@ -1,0 +1,5 @@
+Swipe down on any web page to refresh it.
+Blocks more ads and trackers: many ad rules that were silently ignored now work, including same-site and video ads.
+Fixed a bug where some targeted ad rules could block entire sites instead of just the ad.
+Smoother browsing: the player, queue and media lists are snappier, and results sort naturally (Episode 2 before Episode 10).
+More reliable tabs: background tabs capture more media, and rapid tab switching no longer freezes a tab.
