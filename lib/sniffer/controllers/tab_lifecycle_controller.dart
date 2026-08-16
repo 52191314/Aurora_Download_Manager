@@ -126,6 +126,8 @@ abstract class TabLifecycleHost {
 /// as callbacks on [TabLifecycleHost] so this class has no compile-time
 /// dependency on the parent widget.
 class TabLifecycleController {
+  static int _tabCounter = 0;
+
   final TabLifecycleHost host;
   final TabManager tabManager;
   final DownloadSettings settings;
@@ -285,7 +287,10 @@ class TabLifecycleController {
           .map(
             (e) => {
               'id': e.value.id,
-              'url': e.value.addressController.text.trim(),
+              'url': (e.value.currentUrl ??
+                      e.value.committedMainFrameUrl ??
+                      e.value.addressController.text)
+                  .trim(),
               'active': e.key == tabManager.activeTabIndex,
               'history': e.value.controller.historyUrls,
               'historyIndex': e.value.controller.historyIndex,
@@ -421,8 +426,8 @@ class TabLifecycleController {
           disabledMediaTypes: settings.disabledMediaTypes,
         );
     final addressController = TextEditingController();
-    final tabId =
-        restoredId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final tabId = restoredId ??
+        '${DateTime.now().microsecondsSinceEpoch}_${++_tabCounter}';
     final tab = BrowserTab(
       id: tabId,
       controller: controller,

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:aurora_downloader/downloader/download_queue.dart';
 import 'package:aurora_downloader/sniffer/browser_library.dart';
 import 'package:aurora_downloader/sniffer/library_transfer.dart';
@@ -68,5 +70,54 @@ void main() {
       height: 1080,
     );
     expect(pickStartQuality(a, [b, a]).url, a.url);
+  });
+
+  test('applyImport imports tabs and triggers onImportTabs', () async {
+    final tempDir = await Directory.systemTemp.createTemp('aurora_tab_test_');
+    try {
+      final queue = DownloadQueue();
+      final library = BrowserLibrary.empty();
+      List<String>? importedUrls;
+
+      final summary = await LibraryTransfer.applyImport(
+        decoded: {
+          'tabs': [
+            {
+              'id': 't1',
+              'url': 'https://example.com/tab1',
+              'title': 'Tab 1',
+              'active': true,
+            },
+            {
+              'id': 't2',
+              'url': 'https://example.com/tab2',
+              'title': 'Tab 2',
+              'active': false,
+            },
+            {
+              'id': 't3',
+              'url': 'about:blank',
+              'title': 'Blank',
+              'active': false,
+            },
+          ],
+        },
+        options: const LibraryImportOptions(tabs: true),
+        library: library,
+        downloadQueue: queue,
+        baseDir: tempDir.path,
+        baseTemp: tempDir.path,
+        saveLibrary: (_) async {},
+        onImportTabs: (urls) {
+          importedUrls = urls;
+        },
+      );
+
+      expect(summary.tabsCount, 2);
+      expect(importedUrls, ['https://example.com/tab1', 'https://example.com/tab2']);
+      expect(summary.snackMessage(), contains('2 open tabs'));
+    } finally {
+      await tempDir.delete(recursive: true);
+    }
   });
 }
