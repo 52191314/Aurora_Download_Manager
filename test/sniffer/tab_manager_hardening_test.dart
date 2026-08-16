@@ -259,4 +259,15 @@ void main() {
     expect(() => manager.activeTab, returnsNormally);
     expect(manager.tabs.every((t) => t.groupName == null), isTrue);
   });
+
+  test('openNewTab in tight loop generates unique tab IDs', () {
+    final manager = TabManager();
+    final lifecycle = _makeLifecycle(manager);
+    const count = 30;
+    for (var i = 0; i < count; i++) {
+      lifecycle.openNewTab(url: 'https://example.com/$i', switchToTab: false);
+    }
+    final ids = manager.tabs.map((t) => t.id).toSet();
+    expect(ids.length, count);
+  });
 }

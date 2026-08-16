@@ -1130,16 +1130,35 @@ class _SnifferScreenState extends State<SnifferScreen>
     _openTabsAfterActive(trimmed);
   }
 
-  /// Inserts each URL as a new background tab right after the active one,
-  /// preserving order. Each insert lands at the same relative position.
+  /// Inserts each URL as a new tab after the active one, preserving order.
+  /// If the current active tab is blank, navigates it to the first URL directly.
+  /// Background tabs defer startup initialization until first user activation.
   void _openTabsAfterActive(List<String> urls) {
     if (!mounted || _tabs.isEmpty || urls.isEmpty) return;
+
+    final activeTab = _activeTab;
+    final activeUrl = (activeTab.currentUrl ??
+            activeTab.committedMainFrameUrl ??
+            activeTab.addressController.text)
+        .trim();
+    final isActiveBlank = activeUrl.isEmpty ||
+        activeUrl == 'about:blank' ||
+        activeUrl == 'https://about:blank';
+
+    var remainingUrls = urls;
+    if (isActiveBlank && urls.isNotEmpty) {
+      final firstUrl = urls.first;
+      _navigateActiveTabToExternalUrl(firstUrl);
+      remainingUrls = urls.sublist(1);
+    }
+
     var insertAt = _activeTabIndex + 1;
-    for (final url in urls) {
+    for (final url in remainingUrls) {
       _tabLifecycleController.openNewTab(
         url: url,
         switchToTab: false,
         insertAtIndex: insertAt,
+        deferStartupWork: true,
       );
       insertAt++;
     }
