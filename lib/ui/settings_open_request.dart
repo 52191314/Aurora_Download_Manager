@@ -13,6 +13,7 @@ enum SettingsSection {
   profiles,
   appearance,
   backup,
+  drive,
   pro,
   vault,
   webdav,

@@ -171,8 +171,9 @@ class TabCallbackBinder {
         _host.barsVisible = true;
       }
       tab.fetchedIframeSrcs.clear();
-      debugPrint('Page started: $url');
+      tab.hlsPlaylistCache.clear();
       tab.authHeaderCache.clear();
+      debugPrint('Page started: $url');
       final navHost = Uri.tryParse(url)?.host;
       if (navHost != null) {
         _sniffIntakeController.clearCookieCacheForHost(navHost);
@@ -187,25 +188,44 @@ class TabCallbackBinder {
         tab.snifferEngine.purgeRestrictedMedia();
       }
       final previousUrl = tab.committedMainFrameUrl;
-      if (url != tab.committedMainFrameUrl &&
-          _host.isDifferentPage(tab.currentUrl, url)) {
-        debugPrint('Navigation: clearing media cache ($previousUrl -> $url)');
-        tab.snifferEngine.clearCache();
-        if (tab == _host.activeTab) {
-          _host.latestVideoMedia = null;
-          _host.videoFloatRect = null;
-          _host.floatingPlayerDismissedForUrl = null;
-        }
-      } else {
-        debugPrint('Same-page navigation ($url) — keeping media cache '
-          '(${tab.snifferEngine.detectedMedia.length} items)');
+      debugPrint('Page started: clearing media cache ($previousUrl -> $url)');
+      tab.snifferEngine.clearCache();
+      if (tab == _host.activeTab) {
+        _host.latestVideoMedia = null;
+        _host.videoFloatRect = null;
+        _host.floatingPlayerDismissedForUrl = null;
       }
+      _sniffIntakeController.scheduleMediaRebuild();
+
       if (tab.sniffingEnabled) {
         _sniffIntakeController.sniffBrowserUrl(tab, url, sourcePageUrl: url);
       }
       _host.updateTabNavState(tab);
       if (tab == _host.activeTab) {
         _host.debouncedNavSetState();
+      }
+    });
+    tab.controller.setOnUpdateVisitedHistory((url, isReload) {
+      if (!_host.isMounted) return;
+      final previousUrl = tab.committedMainFrameUrl;
+      final isDifferent = _host.isDifferentPage(previousUrl, url);
+
+      if (isReload || isDifferent) {
+        debugPrint(
+          'History update [${isReload ? "RELOAD" : "SPA_NAV"}]: '
+          'clearing media cache ($previousUrl -> $url)',
+        );
+        tab.snifferEngine.clearCache();
+        tab.fetchedIframeSrcs.clear();
+        tab.hlsPlaylistCache.clear();
+        tab.authHeaderCache.clear();
+        tab.committedMainFrameUrl = url;
+        if (tab == _host.activeTab) {
+          _host.latestVideoMedia = null;
+          _host.videoFloatRect = null;
+          _host.floatingPlayerDismissedForUrl = null;
+        }
+        _sniffIntakeController.scheduleMediaRebuild();
       }
     });
     tab.controller.setOnPageFinished((url) {

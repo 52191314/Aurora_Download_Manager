@@ -137,6 +137,38 @@ class TorrentDownloader implements BaseDownloader {
     }
   }
 
+  /// Proactively verifies whether the native BitTorrent engine is usable on
+  /// this device architecture.
+  ///
+  /// Returns `true` if the native library is loaded or successfully loaded.
+  /// Returns `false` if the native binaries fail to load (e.g. missing .so or
+  /// unsupported CPU ABI).
+  static Future<bool> isNativeEngineAvailable({String? saveDirectory}) async {
+    if (lt.LibtorrentFlutter.isInitialized) return true;
+    final dir = saveDirectory ?? Directory.systemTemp.path;
+    try {
+      final res = await _ensureLtLoaded(dir);
+      return res == _LtLoadResult.ready || res == _LtLoadResult.restarting;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Checks native torrent engine status before a download attempt, returning
+  /// an error message if unavailable, or null if available.
+  static Future<String?> checkNativeEngineAvailability({
+    String? saveDirectory,
+  }) async {
+    final available = await isNativeEngineAvailable(
+      saveDirectory: saveDirectory,
+    );
+    if (!available) {
+      return 'The native BitTorrent engine (libtorrent) failed to load on this device. '
+          'Your device architecture or OS may not be supported.';
+    }
+    return null;
+  }
+
   @override
   Future<void> start() async {
     if (_shouldUseNativeEngine) {

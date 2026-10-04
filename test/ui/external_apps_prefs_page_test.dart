@@ -29,8 +29,6 @@ class MockPathProviderPlatform extends PathProviderPlatform
 
 /// Wraps the page in the minimum tree it needs: a MaterialApp for routing and
 /// ScaffoldMessenger, plus the AuroraPalette that `context.ac` asserts on.
-/// Localization delegates mirror the real app so pages using
-/// AppLocalizations.of(context) resolve.
 Widget _host() => MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

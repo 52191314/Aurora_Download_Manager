@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:aurora_downloader/premium/free_taste.dart';
 import 'package:aurora_downloader/premium/pro_entitlement.dart';
 import 'package:aurora_downloader/premium/pro_features.dart';
-import 'package:aurora_downloader/premium/oss_upsell.dart';
+import 'package:aurora_downloader/premium/pro_upsell_sheet.dart';
 import 'package:aurora_downloader/premium/upsell_controller.dart';
 import 'package:aurora_downloader/settings/download_settings.dart';
 import 'package:aurora_downloader/sniffer/capture/capture_batch_bar.dart';
@@ -28,6 +28,7 @@ import 'package:aurora_downloader/sniffer/media_capture_analyzer.dart';
 import 'package:aurora_downloader/sniffer/models/browser_tab.dart';
 import 'package:aurora_downloader/sniffer/models/sniffed_media.dart';
 import 'package:aurora_downloader/sniffer/series_grab_detector.dart';
+import 'package:aurora_downloader/sniffer/stream_matcher.dart';
 import 'package:aurora_downloader/theme/aurora_palette.dart';
 
 export 'package:aurora_downloader/sniffer/capture/media_filter.dart';
@@ -114,6 +115,11 @@ void showSniffedMediaSheet(
     BuildContext context,
     List<SniffedMedia> items,
   ) onBatchEnqueue,
+  Future<void> Function(
+    BuildContext context,
+    String taskId,
+    SniffedMedia donorMedia,
+  )? onReplaceTaskStream,
   required VoidCallback onRescan,
 }) {
   if (!isMounted) return;
@@ -145,6 +151,7 @@ void showSniffedMediaSheet(
         onInfo: onInfo,
         onAddToQueue: onAddToQueue,
         onBatchEnqueue: onBatchEnqueue,
+        onReplaceTaskStream: onReplaceTaskStream,
         onRescan: onRescan,
         parentContext: context,
       );
@@ -167,6 +174,7 @@ class _CaptureSheetScaffold extends StatefulWidget {
     required this.onInfo,
     required this.onAddToQueue,
     required this.onBatchEnqueue,
+    this.onReplaceTaskStream,
     required this.onRescan,
     required this.parentContext,
   });
@@ -190,6 +198,11 @@ class _CaptureSheetScaffold extends StatefulWidget {
     BuildContext context,
     List<SniffedMedia> items,
   ) onBatchEnqueue;
+  final Future<void> Function(
+    BuildContext context,
+    String taskId,
+    SniffedMedia donorMedia,
+  )? onReplaceTaskStream;
   final VoidCallback onRescan;
   final BuildContext parentContext;
 
@@ -599,10 +612,39 @@ class _CaptureSheetScaffoldState extends State<_CaptureSheetScaffold> {
                                 item.type == MediaType.audio ||
                                 item.type == MediaType.image;
 
+                            final isResniffMode = widget.activeTab.isResniffing;
+                            final donorUrl = widget.activeTab.resniffDonorUrl;
+                            final sourcePageUrl =
+                                widget.activeTab.resniffSourcePageUrl;
+
+                            double matchScore = 0.0;
+                            if (isResniffMode && donorUrl != null) {
+                              final eval = StreamMatcher.evaluateCandidate(
+                                candidate: item.url,
+                                original: donorUrl,
+                                sourcePageUrl: sourcePageUrl,
+                              );
+                              matchScore = eval.score;
+                            }
+
                             return CaptureMediaRow(
                               index: index,
                               group: group,
                               selected: isSelected,
+                              isResniffMode: isResniffMode,
+                              resniffMatchScore: matchScore,
+                              onReplaceTaskStream: widget.onReplaceTaskStream !=
+                                          null &&
+                                      widget.activeTab.resniffTaskId != null
+                                  ? () {
+                                      Navigator.of(context).pop();
+                                      widget.onReplaceTaskStream!(
+                                        widget.parentContext,
+                                        widget.activeTab.resniffTaskId!,
+                                        item,
+                                      );
+                                    }
+                                  : null,
                               displayMode:
                                   _sheetSettings.sniffedMediaDisplayMode,
                               // Page artwork suits playable media only — an

@@ -1,4 +1,4 @@
-Aurora Download Manager is a web browser with a serious download manager built in.
+Optimus Download Manager (ODM) is a web browser with a serious download manager built in.
 
 BROWSE WITHOUT THE JUNK
 
@@ -8,7 +8,7 @@ BROWSE WITHOUT THE JUNK
 
 FIND THE FILE
 
-• Aurora spots downloadable media and file links while you browse, and keeps finding them on pages where simpler tools come up empty
+• ODM spots downloadable media and file links while you browse, and keeps finding them on pages where simpler tools come up empty
 • Grab a batch in one tap — unlimited batch capture
 • Streaming playlists are reassembled into a single playable file when the site allows it
 • Preview a video before you commit to downloading it, in a built-in player with gesture seek, speed control and picture-in-picture
@@ -39,21 +39,12 @@ YOUR FILES STAY YOURS
 • Send files to your computer over your own Wi-Fi, with nothing routed through a server
 • No account required. No ads. No trackers.
 
-EVERYTHING UNLOCKED
-
-• Up to 64 downloads at once and 64 parts per file
-• Full media conversion suite (FFmpeg Studio) included in the app
-• Unlimited ad-block filter lists, custom lists, element-hiding rules, and the tracker pack
-• Download rules, schedules, night mode, per-site profiles, proxy, and unlimited tab groups
-• Automatic dead-link revival, unlimited batch capture and audio extraction
-• Private vault with biometric lock and sync, folder watcher, and a local automation API
-
-WHAT AURORA DOES NOT DO
-
-• Ad blocking works inside Aurora's own browser only. It is not a VPN and does not filter other apps
+WHAT ODM DOES NOT DO
+ 
+• Ad blocking works inside ODM's own browser only. It is not a VPN and does not filter other apps
 • Only download content you have the right to download
-
-Aurora is free and open source (GPL-3.0). This build is the fully unlocked open-source edition — every feature is enabled, with no purchases, no account and no ads.
+ 
+ODM is free and open source (GPL-3.0). This build is the open-source edition with no purchases, no account and no ads.
 
 DONATE
 

@@ -3,10 +3,11 @@ import 'dart:io';
 
 import '../downloader/models.dart';
 import 'headless_resniffer.dart';
+import 'resniff_result.dart';
 import '../premium/pro_features.dart';
 
 // ignore: implementation_imports
-import 'package:aurora_downloader/premium/oss_upsell.dart';
+import 'package:aurora_downloader/premium/pro_upsell_sheet.dart';
 
 /// Centralised dead-link / token-expiry revival (P4).
 ///
@@ -21,6 +22,7 @@ import 'package:aurora_downloader/premium/oss_upsell.dart';
 /// check the entitlement before invoking [refresh] automatically. Manual
 /// refresh (user-initiated) always works and is never gated.
 class TokenRefreshService {
+  static ResniffResult? debugMockResult;
   TokenRefreshService._();
 
   /// Max automatic headless tries per task per process. Beyond this we stop
@@ -39,40 +41,70 @@ class TokenRefreshService {
 
   /// Refreshes the playlist/manifest URL for [task] using a headless WebView.
   ///
-  /// Returns a fresh URL, or null if no fresh URL could be found. Never throws.
-  static Future<String?> refresh(DownloadTask task) async {
-    if (!Platform.isAndroid && !Platform.isIOS) return null;
+  /// Returns a strongly-typed [ResniffResult]. Never throws.
+  static Future<ResniffResult> refresh(DownloadTask task) async {
+    if (debugMockResult != null) {
+      await Future.delayed(const Duration(seconds: 1));
+      return debugMockResult!;
+    }
     final sourcePageUrl = task.sourcePageUrl;
     if (sourcePageUrl == null || !sourcePageUrl.startsWith('http')) {
-      return null;
+      return const ResniffSourceUnavailable(
+        error: 'Missing source page URL',
+      );
+    }
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return const ResniffSourceUnavailable(
+        error: 'Headless resniff is only supported on mobile platforms',
+      );
     }
     try {
       final resniffer = HeadlessPageResniffer();
-      // Match against the media URL path (query differs = token refreshed).
-      final fromHeadless = await resniffer.resniff(
+      final result = await resniffer.resniff(
         sourcePageUrl,
-        mustMatchPathOf: task.url,
+        originalMediaUrl: task.url,
+        headers: task.headers,
       );
-      if (fromHeadless != null) return fromHeadless;
-    } catch (_) {
-      return null;
+      return result;
+    } catch (e) {
+      return ResniffSourceUnavailable(
+        error: 'Headless resniff failed: $e',
+      );
     }
-    return null;
   }
 
   /// Automatic revival entry point used by the download engine on token
-  /// expiry. Returns a fresh URL, or null when revival is not permitted or
-  /// failed.
+  /// expiry. Returns a [ResniffResult] when revival is evaluated.
   ///
   /// [allowed] should be `ProFeatures.allows(ProFeature.deadLinkRevival, tier)`.
-  /// When false (free tier), this returns null and the caller is expected to
-  /// mark the task failed with [kAutoRefreshLockedReason]. Manual refresh
-  /// paths must NOT call this — they call [refresh] directly.
-  static Future<String?> autoRefresh(DownloadTask task, {required bool allowed}) async {
-    if (!allowed) return null;
-    if (autoBudgetExhausted(task)) return null;
+  /// When false (free tier), this returns [ResniffSourceUnavailable] with
+  /// [kAutoRefreshLockedReason] and marks [task.errorMessage].
+  /// Manual refresh paths must NOT call this — they call [refresh] directly.
+  static Future<ResniffResult> autoRefresh(
+    DownloadTask task, {
+    required bool allowed,
+  }) async {
+    if (!allowed) {
+      task.errorMessage = kAutoRefreshLockedReason;
+      return const ResniffSourceUnavailable(error: kAutoRefreshLockedReason);
+    }
+    if (autoBudgetExhausted(task)) {
+      return const ResniffSourceUnavailable(
+        error: 'Automatic link revival retry budget exhausted',
+      );
+    }
     _recordAutoTry(task);
     return refresh(task);
+  }
+
+  /// Resets the auto-retry counter for [task] (useful in tests or when retrying).
+  static void resetAutoTry(DownloadTask task) {
+    _autoTried.remove(task.id);
+  }
+
+  /// Clears all auto-retry tracking counters across tasks.
+  static void clearBudgets() {
+    _autoTried.clear();
   }
 
   /// Failure reason set on a task when automatic revival is blocked by the
@@ -87,14 +119,13 @@ class TokenRefreshService {
   /// The gate is evaluated at **invocation** time (not creation) so a user
   /// who upgrades to Pro mid-session immediately gains auto revival. When the
   /// gate is closed (free tier), [task.errorMessage] is set to
-  /// [kAutoRefreshLockedReason] and null is returned — the engine then fails
-  /// the task with that reason instead of silently hanging.
+  /// [kAutoRefreshLockedReason] and [ResniffSourceUnavailable] is returned.
   ///
   /// Manual refresh paths must NOT use this wrapper; they call [refresh]
   /// directly and remain free for everyone.
-  static Future<String?> Function({bool forceReload}) gatedClosure(
+  static Future<ResniffResult> Function({bool forceReload}) gatedClosure(
     DownloadTask task,
-    Future<String?> Function({bool forceReload}) base,
+    Future<ResniffResult> Function({bool forceReload}) base,
   ) {
     return ({bool forceReload = false}) async {
       final ent = proUpsellEntitlement;
@@ -102,7 +133,7 @@ class TokenRefreshService {
           ProFeatures.allows(ProFeature.deadLinkRevival, ent.tier);
       if (!allowed) {
         task.errorMessage = kAutoRefreshLockedReason;
-        return null;
+        return const ResniffSourceUnavailable(error: kAutoRefreshLockedReason);
       }
       return base(forceReload: forceReload);
     };

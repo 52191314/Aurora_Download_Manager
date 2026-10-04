@@ -50,6 +50,10 @@ class TabManager {
   /// Callback invoked after any state change that needs a [State.setState].
   VoidCallback? onRebuild;
 
+  /// Callback invoked when the active tab's detected media count changes,
+  /// or when switching tabs, so host badges (e.g. dock badge) stay in sync.
+  void Function(int count)? onActiveTabMediaCountChanged;
+
   /// Callback that returns whether the user has Pro entitlement.
   /// Used to gate tab group count and auto-host for free users.
   bool Function() isProCallback;
@@ -88,6 +92,7 @@ class TabManager {
     snifferSubscription?.cancel();
     snifferSubscription = activeTab.snifferEngine.onMediaChanged.listen((_) {
       onRebuild?.call();
+      onActiveTabMediaCountChanged?.call(activeTab.snifferEngine.detectedMedia.length);
     });
 
     if (previous != activeTabIndex && previous >= 0 && previous < tabs.length) {
@@ -106,6 +111,7 @@ class TabManager {
     unawaited(_activateTabWebView(newActive, generation));
 
     onRebuild?.call();
+    onActiveTabMediaCountChanged?.call(newActive.snifferEngine.detectedMedia.length);
     return previous;
   }
 
@@ -158,7 +164,11 @@ class TabManager {
     if (tabs.isNotEmpty) {
       snifferSubscription = activeTab.snifferEngine.onMediaChanged.listen((_) {
         onRebuild?.call();
+        onActiveTabMediaCountChanged?.call(activeTab.snifferEngine.detectedMedia.length);
       });
+      onActiveTabMediaCountChanged?.call(activeTab.snifferEngine.detectedMedia.length);
+    } else {
+      onActiveTabMediaCountChanged?.call(0);
     }
     onRebuild?.call();
     return removed;
@@ -177,6 +187,7 @@ class TabManager {
     activeTabIndex = 0;
     mediaRebuildTimer?.cancel();
     mediaSaveTimer?.cancel();
+    onActiveTabMediaCountChanged?.call(0);
     onRebuild?.call();
   }
 

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'build_channel.dart';
 import 'pro_entitlement_store.dart';
 
 /// Distribution tier derived from owned Play product IDs.
@@ -65,9 +64,8 @@ EntitlementTier maxTierForOwned(Iterable<String> owned) {
 /// [setDebugTier]. The override is **never** persisted to disk and resets on
 /// app restart. In **release** builds, the debug override is a no-op.
 ///
-/// OSS edition: the effective tier defaults to Ultra in release builds (see
-/// [freshInstallTier]) — there is no Play purchase path. Last-known state is
-/// cached offline via [ProEntitlementStore].
+/// Play channel: [PlayBillingService] grants tiers after purchase or restore.
+/// Last-known state is cached offline via [ProEntitlementStore].
 class ProEntitlement extends ChangeNotifier {
   EntitlementTier _tier = EntitlementTier.free;
   EntitlementTier? _debugOverride; // null = none; never persisted
@@ -88,23 +86,6 @@ class ProEntitlement extends ChangeNotifier {
   Future<void>? _writeChain;
 
   /// Effective tier for a fresh install (no purchases, no license).
-  ///
-  /// OSS channel (GitHub / F-Droid / sideload) **release** builds are the
-  /// fully unlocked open-source edition: there is no Play billing path to sell
-  /// into, and F-Droid requires the shipped build to be functional with every
-  /// advertised feature. Debug/profile builds fall through to the
-  /// purchase-derived [storeTier] so the freemium UX stays testable via
-  /// [setDebugTier]. Pure function — the caller wires [kReleaseMode] and
-  /// [BuildChannel.isGithub].
-  static EntitlementTier freshInstallTier(
-    EntitlementTier storeTier, {
-    required bool releaseMode,
-    required bool githubChannel,
-  }) {
-    if (releaseMode && githubChannel) return EntitlementTier.ultra;
-    return storeTier;
-  }
-
   /// Effective tier — what every feature gate reads.
   ///
   /// When server-side licensing is active, a tier is only real if the license
@@ -115,11 +96,7 @@ class ProEntitlement extends ChangeNotifier {
     final override = _debugOverride;
     if (override != null) return override;
     if (_licenseGating) return _licensedTier ?? EntitlementTier.free;
-    return freshInstallTier(
-      _tier,
-      releaseMode: kReleaseMode,
-      githubChannel: BuildChannel.isGithub,
-    );
+    return _tier;
   }
 
   /// Tier implied by the Play purchases this device knows about, independent of

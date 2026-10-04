@@ -591,9 +591,9 @@ class MediaSnifferEngine implements MediaEnricherHost {
     cache.clearDedupOnly();
   }
 
-  /// Clears the global cross-tab dedup cache so the same URL can be
-  /// re-detected across tabs. Call this when the user explicitly clears
-  /// captured media.
+  /// Deprecated: Cross-tab global cache has been removed in favor of strict
+  /// per-tab isolation. This method is retained as a no-op for compatibility.
+  @Deprecated('No-op: global cross-tab dedup has been removed')
   static void clearGlobalCache() {
     SniffedMediaCache.clearGlobal();
   }

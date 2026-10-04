@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:aurora_downloader/ui/widgets/dock_order_store.dart';
 
 import '../../theme/aurora_palette.dart';
+import '../../dev/screenshot_fixtures.dart';
 import '../models/browser_tab.dart';
 
 /// Compact, flat icon button used in the browser bottom dock.
@@ -60,6 +61,8 @@ class BrowserPrimaryBar extends StatelessWidget {
   final VoidCallback? onQueue;
   /// Open the bookmarks / favorites list (not toggle current page).
   final VoidCallback? onBookmarksMenu;
+  final VoidCallback? onBackScreenshot;
+  final VoidCallback? onForwardScreenshot;
   final GlobalKey? menuKey;
   final GlobalKey? snifferKey;
   final GlobalKey? tabsKey;
@@ -73,6 +76,8 @@ class BrowserPrimaryBar extends StatelessWidget {
     required this.onMenu,
     this.onQueue,
     this.onBookmarksMenu,
+    this.onBackScreenshot,
+    this.onForwardScreenshot,
     this.menuKey,
     this.snifferKey,
     this.tabsKey,
@@ -108,14 +113,26 @@ class BrowserPrimaryBar extends StatelessWidget {
         CompactNavButton(
           buttonKey: const Key('sniffer_back_button'),
           icon: Icons.arrow_back_ios_new,
-          enabled: canBack,
-          onTap: canBack ? () => tab.controller.goBack() : null,
+          enabled: canBack || kScreenshotMode,
+          onTap: () {
+            if (kScreenshotMode && onBackScreenshot != null) {
+              onBackScreenshot!();
+              return;
+            }
+            if (canBack) tab.controller.goBack();
+          },
         ),
         CompactNavButton(
           buttonKey: const Key('sniffer_forward_button'),
           icon: Icons.arrow_forward_ios,
-          enabled: canForward,
-          onTap: canForward ? () => tab.controller.goForward() : null,
+          enabled: canForward || kScreenshotMode,
+          onTap: () {
+            if (kScreenshotMode && onForwardScreenshot != null) {
+              onForwardScreenshot!();
+              return;
+            }
+            if (canForward) tab.controller.goForward();
+          },
         ),
         CompactNavButton(
           buttonKey: const Key('browser_queue_button'),

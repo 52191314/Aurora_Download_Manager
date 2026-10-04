@@ -6,6 +6,7 @@ import 'package:aurora_downloader/premium/pro_entitlement.dart';
 import 'package:aurora_downloader/premium/pro_features.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
     FreeCapStore.debugReset();
   });
@@ -39,6 +40,7 @@ void main() {
       expect(FreeTaste.mode(ProFeature.proxy), isNull);
       expect(FreeTaste.mode(ProFeature.wifiOnly), isNull);
       expect(FreeTaste.mode(ProFeature.deadLinkRevival), isNull);
+      expect(FreeTaste.mode(ProFeature.videoLibrary), isNull);
     });
 
     test('Ultra features → null (hard lock)', () {

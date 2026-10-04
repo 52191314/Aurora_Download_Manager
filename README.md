@@ -1,18 +1,18 @@
-# Aurora Download Manager
+# Optimus Download Manager (ODM)
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%28API%2024%2B%29-green.svg)](https://developer.android.com)
 [![Flutter](https://img.shields.io/badge/Built%20with-Flutter-02569B.svg?logo=flutter)](https://flutter.dev)
 
-**Aurora Download Manager solves the friction of capturing and downloading media on Android.** It seamlessly transforms web browsing into background media capture with an integrated network sniffer, multi-threaded segmented HTTP engine, native HLS/DASH remuxing, and BitTorrent support — all wrapped in a sleek Nordic Glass UI.
+**Optimus Download Manager (ODM) solves the friction of capturing and downloading media on Android.** It seamlessly transforms web browsing into background media capture with an integrated network sniffer, multi-threaded segmented HTTP engine, native HLS/DASH remuxing, and BitTorrent support — all wrapped in a sleek Nordic Glass UI.
 
-> **Open-source edition**: this repository is the fully unlocked open-source build — every Pro & Ultra feature is enabled by default, with **no proprietary components** (no Play Billing, no Google Play Services, no license server). It is built and distributed from source for GitHub Releases / F-Droid / sideload. The freemium listing with one-time in-app purchases is distributed separately on the Google Play Store.
+> **Open-source edition**: this repository is the open-source build with **no proprietary components** (no Play Billing, no Google Play Services, no license server). It is built and distributed from source for GitHub Releases / F-Droid / sideload. The freemium listing with one-time in-app purchases is distributed separately on the Google Play Store.
 
 ---
 
 ## Quick Start (One Command)
 
-Test, analyze, and spin up Aurora Download Manager on your Android device or emulator with a single command:
+Test, analyze, and spin up Optimus Download Manager on your Android device or emulator with a single command:
 
 ```bash
 git clone https://github.com/52191314/Aurora_Download_Manager.git && cd Aurora_Download_Manager && flutter pub get && flutter test && flutter run

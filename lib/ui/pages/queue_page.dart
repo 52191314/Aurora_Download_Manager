@@ -6,13 +6,15 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../compliance/restricted_media_policy.dart';
 import '../../downloader/downloader.dart';
 import '../../premium/ffmpeg/ffmpeg_module_loader.dart';
 import '../../premium/ffmpeg/ffmpeg_service.dart';
 import '../../premium/pro_entitlement.dart';
 import '../../premium/pro_features.dart';
-import '../../premium/oss_upsell.dart';
+import '../../premium/pro_upsell_sheet.dart';
 import '../../l10n/app_localizations.dart';
+import '../../sniffer/resniff_result.dart';
 import '../../theme/aurora_palette.dart';
 import '../../theme/aurora_tokens.dart';
 import '../notifications/aurora_snackbar.dart';
@@ -40,7 +42,7 @@ final class _TaskCallbacks {
   final Future<List<int>?> Function(String url)? fetchBinaryViaWebView;
   final String? Function(String url)? hlsPlaylistCache;
   final Future<Map<String, String>> Function(String url)? cookieProvider;
-  final Future<String?> Function({bool forceReload})? onTokenExpired;
+  final Future<ResniffResult> Function({bool forceReload})? onTokenExpired;
 
   _TaskCallbacks._(DownloadTask task)
     : fetchViaWebView = task.fetchViaWebView,
@@ -896,15 +898,14 @@ class _QueuePageState extends State<QueuePage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const EmptyQueue(),
-              if (widget.onOpenBrowser != null) ...[
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  icon: const Icon(Icons.travel_explore, size: 18),
-                  label: Text(AppLocalizations.of(context)!.queueOpenBrowser),
-                  onPressed: widget.onOpenBrowser,
-                ),
-              ],
+              EmptyQueue(
+                onPasteLink: () => unawaited(_pasteClipboardIntoUrl(enqueue: true)),
+                onOpenBrowser: widget.onOpenBrowser,
+                onAddTorrent: () => unawaited(_pasteClipboardIntoUrl(
+                  enqueue: true,
+                  magnetOnly: true,
+                )),
+              ),
             ],
           ),
         ),
@@ -967,7 +968,22 @@ class _QueuePageState extends State<QueuePage> {
                             ),
                             splashRadius: 14,
                           )
-                        : null,
+                        : IconButton(
+                            tooltip: 'Paste link',
+                            icon: Icon(
+                              Icons.content_paste_rounded,
+                              size: 18,
+                              color: ac.accentFrost,
+                            ),
+                            onPressed: () =>
+                                unawaited(_pasteClipboardIntoUrl(enqueue: false)),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                            splashRadius: 14,
+                          ),
                     filled: true,
                     fillColor: ac.surfacePanel,
                     isDense: true,
@@ -1031,6 +1047,51 @@ class _QueuePageState extends State<QueuePage> {
     );
   }
 
+  Future<void> _pasteClipboardIntoUrl({
+    required bool enqueue,
+    bool magnetOnly = false,
+  }) async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text?.trim() ?? '';
+      if (text.isEmpty) {
+        _urlFocusNode.requestFocus();
+        if (mounted) {
+          AuroraSnackbar.show(
+            context,
+            magnetOnly
+                ? 'Copy a magnet link or .torrent URL, then tap again.'
+                : 'Copy a link, then tap Paste.',
+          );
+        }
+        return;
+      }
+      final lower = text.toLowerCase();
+      final looksMagnet = lower.startsWith('magnet:') ||
+          lower.endsWith('.torrent') ||
+          lower.contains('.torrent?');
+      if (magnetOnly && !looksMagnet) {
+        widget.urlController.text = text;
+        _urlFocusNode.requestFocus();
+        if (mounted) {
+          AuroraSnackbar.show(
+            context,
+            'That clipboard text is not a magnet or .torrent. Edit it above, or open the browser.',
+          );
+        }
+        return;
+      }
+      widget.urlController.text = text;
+      if (enqueue) {
+        await widget.onAddDownload();
+      } else {
+        _urlFocusNode.requestFocus();
+      }
+    } catch (_) {
+      _urlFocusNode.requestFocus();
+    }
+  }
+
   Future<void> _scheduleDownloadFromUrlInput(BuildContext context) async {
     final rawUrl = widget.urlController.text.trim();
     if (rawUrl.isEmpty) {
@@ -1041,6 +1102,16 @@ class _QueuePageState extends State<QueuePage> {
       );
       return;
     }
+
+    if (RestrictedMediaPolicy.isBlocked(mediaUrl: rawUrl)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(RestrictedMediaPolicy.userMessageRestricted),
+        ),
+      );
+      return;
+    }
+
     final picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now().add(const Duration(hours: 1)),
@@ -1060,14 +1131,30 @@ class _QueuePageState extends State<QueuePage> {
       time.hour,
       time.minute,
     );
+
     final taskId = DateTime.now().millisecondsSinceEpoch.toString();
+    final docsDir = await getApplicationDocumentsDirectory();
+    final tempDir = await getTemporaryDirectory();
+    final baseDir = Directory(p.join(docsDir.path, 'completed'));
+    if (!baseDir.existsSync()) {
+      await baseDir.create(recursive: true);
+    }
+
+    var baseName = rawUrl.split('/').last.split('?').first.trim();
+    if (baseName.isEmpty) baseName = 'download';
+    baseName = FilenameService.sanitize(baseName);
+    if (baseName.isEmpty) baseName = 'download';
+
+    final savePath = FilenameService.uniquePath(
+      p.join(baseDir.path, baseName),
+      reservedPaths: widget.queue.allTasks.map((t) => t.savePath),
+    );
+
     final task = DownloadTask(
       id: taskId,
       url: rawUrl,
-      savePath: rawUrl.split('/').last.isNotEmpty
-          ? rawUrl.split('/').last
-          : 'download',
-      tempDir: 'temp_$taskId',
+      savePath: savePath,
+      tempDir: p.join(tempDir.path, taskId),
     );
     widget.queue.scheduleTask(task, startAt);
     widget.urlController.clear();

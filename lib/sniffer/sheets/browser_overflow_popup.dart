@@ -1,44 +1,67 @@
 import 'package:flutter/material.dart';
 
-import '../../l10n/app_localizations.dart';
 import '../../theme/aurora_palette.dart';
 
-/// One row in the Samsung-style overflow popup (Settings or Tools).
+/// One row in the Chrome-style overflow popup.
 class OverflowMenuEntry {
   final IconData icon;
   final String label;
   final Color? color;
+  final String? badge;
   final VoidCallback onTap;
+  final bool isDivider;
+  final bool isHeader;
 
   const OverflowMenuEntry({
     required this.icon,
     required this.label,
     this.color,
+    this.badge,
     required this.onTap,
-  });
+  })  : isDivider = false,
+        isHeader = false;
+
+  const OverflowMenuEntry.divider()
+      : icon = Icons.remove,
+        label = '',
+        color = null,
+        badge = null,
+        onTap = _noop,
+        isDivider = true,
+        isHeader = false;
+
+  const OverflowMenuEntry.header(this.label)
+      : icon = Icons.label_outline,
+        color = null,
+        badge = null,
+        onTap = _noop,
+        isDivider = false,
+        isHeader = true;
+
+  static void _noop() {}
 }
 
+/// Kept so existing tests compile. The popup is a single list now.
 enum OverflowMenuSegment { settings, tools }
 
-/// Remembers last Settings | Tools choice for the next menu open.
 class OverflowMenuSegmentStore {
   static OverflowMenuSegment last = OverflowMenuSegment.settings;
 }
 
-/// Right-bottom floating card (partial width/height) with Settings | Tools.
-///
-/// Matches Samsung Browser overflow geometry — not a full-width bottom sheet.
+/// Right-bottom floating card matching Chrome's overflow geometry.
 Future<void> showBrowserOverflowPopup(
   BuildContext context, {
   String? pageTitle,
   String? pageUrl,
-  required List<OverflowMenuEntry> settingsEntries,
-  required List<OverflowMenuEntry> toolEntries,
+  bool isSecure = false,
+  VoidCallback? onShare,
+  List<OverflowMenuEntry>? entries,
+  List<OverflowMenuEntry> settingsEntries = const [],
+  List<OverflowMenuEntry> toolEntries = const [],
   OverflowMenuSegment? initialSegment,
   ValueChanged<List<String>>? onReorderSettings,
   ValueChanged<List<String>>? onReorderTools,
 }) {
-  final segment = initialSegment ?? OverflowMenuSegmentStore.last;
   final host = () {
     final raw = pageUrl?.trim() ?? '';
     if (raw.isEmpty) return '';
@@ -47,6 +70,14 @@ Future<void> showBrowserOverflowPopup(
   final title = (pageTitle != null && pageTitle.trim().isNotEmpty)
       ? pageTitle.trim()
       : (host.isNotEmpty ? host : 'Current page');
+
+  final combined = entries ??
+      <OverflowMenuEntry>[
+        ...toolEntries,
+        if (toolEntries.isNotEmpty && settingsEntries.isNotEmpty)
+          const OverflowMenuEntry.divider(),
+        ...settingsEntries,
+      ];
 
   return showGeneralDialog<void>(
     context: context,
@@ -60,19 +91,19 @@ Future<void> showBrowserOverflowPopup(
     transitionBuilder: (ctx, anim, secondary, child) {
       final size = MediaQuery.sizeOf(ctx);
       final pad = MediaQuery.paddingOf(ctx);
-      final maxW = (size.width * 0.48).clamp(240.0, 320.0);
-      final maxH = size.height * 0.62;
+      final maxW = (size.width * 0.78).clamp(280.0, 360.0);
+      final maxH = size.height * 0.72;
       final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
 
       return Stack(
         children: [
           Positioned(
-            right: 10,
+            right: 12,
             bottom: pad.bottom + 56,
             child: FadeTransition(
               opacity: curved,
               child: ScaleTransition(
-                scale: Tween<double>(begin: 0.92, end: 1).animate(curved),
+                scale: Tween<double>(begin: 0.94, end: 1).animate(curved),
                 alignment: Alignment.bottomRight,
                 child: Material(
                   color: Colors.transparent,
@@ -81,11 +112,9 @@ Future<void> showBrowserOverflowPopup(
                     maxHeight: maxH,
                     title: title,
                     host: host,
-                    settingsEntries: settingsEntries,
-                    toolEntries: toolEntries,
-                    initialSegment: segment,
-                    onReorderSettings: onReorderSettings,
-                    onReorderTools: onReorderTools,
+                    isSecure: isSecure,
+                    onShare: onShare,
+                    entries: combined,
                   ),
                 ),
               ),
@@ -97,73 +126,39 @@ Future<void> showBrowserOverflowPopup(
   );
 }
 
-class _OverflowCard extends StatefulWidget {
+class _OverflowCard extends StatelessWidget {
   final double maxWidth;
   final double maxHeight;
   final String title;
   final String host;
-  final List<OverflowMenuEntry> settingsEntries;
-  final List<OverflowMenuEntry> toolEntries;
-  final OverflowMenuSegment initialSegment;
-  final ValueChanged<List<String>>? onReorderSettings;
-  final ValueChanged<List<String>>? onReorderTools;
+  final bool isSecure;
+  final VoidCallback? onShare;
+  final List<OverflowMenuEntry> entries;
 
   const _OverflowCard({
     required this.maxWidth,
     required this.maxHeight,
     required this.title,
     required this.host,
-    required this.settingsEntries,
-    required this.toolEntries,
-    required this.initialSegment,
-    this.onReorderSettings,
-    this.onReorderTools,
+    required this.isSecure,
+    required this.entries,
+    this.onShare,
   });
-
-  @override
-  State<_OverflowCard> createState() => _OverflowCardState();
-}
-
-class _OverflowCardState extends State<_OverflowCard> {
-  late OverflowMenuSegment _segment;
-  late List<OverflowMenuEntry> _settingsEntries;
-  late List<OverflowMenuEntry> _toolEntries;
-
-  @override
-  void initState() {
-    super.initState();
-    _segment = widget.initialSegment;
-    _settingsEntries = List.from(widget.settingsEntries);
-    _toolEntries = List.from(widget.toolEntries);
-  }
-
-  @override
-  void didUpdateWidget(covariant _OverflowCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.settingsEntries != widget.settingsEntries) {
-      _settingsEntries = List.from(widget.settingsEntries);
-    }
-    if (oldWidget.toolEntries != widget.toolEntries) {
-      _toolEntries = List.from(widget.toolEntries);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final ac = context.ac;
-    final entries = _segment == OverflowMenuSegment.settings
-        ? _settingsEntries
-        : _toolEntries;
+    final initial = host.isNotEmpty ? host[0].toUpperCase() : 'A';
 
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxWidth: widget.maxWidth,
-        maxHeight: widget.maxHeight,
+        maxWidth: maxWidth,
+        maxHeight: maxHeight,
       ),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: ac.overlay,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(28),
           border: Border.all(color: ac.glassBorder),
           boxShadow: [
             BoxShadow(
@@ -174,27 +169,24 @@ class _OverflowCardState extends State<_OverflowCard> {
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Site header
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                padding: const EdgeInsets.fromLTRB(14, 14, 8, 10),
                 child: Row(
                   children: [
                     CircleAvatar(
-                      radius: 16,
-                      backgroundColor: ac.accentFrost.withValues(alpha: 0.15),
+                      radius: 18,
+                      backgroundColor: ac.surfaceElevated,
                       child: Text(
-                        widget.host.isNotEmpty
-                            ? widget.host[0].toUpperCase()
-                            : 'A',
+                        initial,
                         style: TextStyle(
-                          color: ac.accentFrost,
+                          color: ac.textPrimary,
                           fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                          fontSize: 16,
                         ),
                       ),
                     ),
@@ -203,19 +195,33 @@ class _OverflowCardState extends State<_OverflowCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            widget.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: ac.textPrimary,
-                            ),
+                          Row(
+                            children: [
+                              Icon(
+                                isSecure
+                                    ? Icons.lock_rounded
+                                    : Icons.lock_open_rounded,
+                                size: 12,
+                                color: ac.textSecondary,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: ac.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          if (widget.host.isNotEmpty)
+                          if (host.isNotEmpty)
                             Text(
-                              widget.host,
+                              host,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -226,63 +232,57 @@ class _OverflowCardState extends State<_OverflowCard> {
                         ],
                       ),
                     ),
+                    if (onShare != null)
+                      IconButton(
+                        tooltip: 'Share',
+                        icon: Icon(
+                          Icons.ios_share_rounded,
+                          size: 20,
+                          color: ac.textPrimary,
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          onShare!();
+                        },
+                      ),
                   ],
                 ),
               ),
-              // Settings | Tools segments
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: ac.surfaceElevated,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      _SegChip(
-                        label: AppLocalizations.of(context)?.menuSegmentSettings ?? 'Settings',
-                        selected: _segment == OverflowMenuSegment.settings,
-                        onTap: () => setState(() {
-                          _segment = OverflowMenuSegment.settings;
-                          OverflowMenuSegmentStore.last = _segment;
-                        }),
-                      ),
-                      _SegChip(
-                        label: AppLocalizations.of(context)?.menuSegmentTools ?? 'Tools',
-                        selected: _segment == OverflowMenuSegment.tools,
-                        onTap: () => setState(() {
-                          _segment = OverflowMenuSegment.tools;
-                          OverflowMenuSegmentStore.last = _segment;
-                        }),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
               Flexible(
-                child: ReorderableListView.builder(
+                child: ListView.builder(
                   shrinkWrap: true,
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.only(bottom: 10),
                   itemCount: entries.length,
-                  onReorder: (oldIndex, newIndex) {
-                    setState(() {
-                      if (oldIndex < newIndex) {
-                        newIndex -= 1;
-                      }
-                      final item = entries.removeAt(oldIndex);
-                      entries.insert(newIndex, item);
-                      final newOrder = entries.map((e) => e.label).toList();
-                      if (_segment == OverflowMenuSegment.settings) {
-                        widget.onReorderSettings?.call(newOrder);
-                      } else {
-                        widget.onReorderTools?.call(newOrder);
-                      }
-                    });
-                  },
                   itemBuilder: (context, i) {
                     final e = entries[i];
+                    if (e.isDivider) {
+                      return Padding(
+                        key: ValueKey('divider_$i'),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: ac.borderHairline,
+                        ),
+                      );
+                    }
+                    if (e.isHeader) {
+                      return Padding(
+                        key: ValueKey('header_${i}_${e.label}'),
+                        padding: const EdgeInsets.fromLTRB(18, 14, 18, 6),
+                        child: Text(
+                          e.label.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: ac.textTertiary,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      );
+                    }
                     return Material(
-                      key: ValueKey('${_segment.name}_${e.label}'),
+                      key: ValueKey('row_${i}_${e.label}'),
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: () {
@@ -291,34 +291,50 @@ class _OverflowCardState extends State<_OverflowCard> {
                         },
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
+                            horizontal: 18,
+                            vertical: 13,
                           ),
                           child: Row(
                             children: [
                               Icon(
                                 e.icon,
-                                size: 20,
+                                size: 22,
                                 color: e.color ?? ac.textPrimary,
                               ),
-                              const SizedBox(width: 14),
+                              const SizedBox(width: 18),
                               Expanded(
                                 child: Text(
                                   e.label,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w400,
                                     color: ac.textPrimary,
                                   ),
                                 ),
                               ),
-                              Icon(
-                                Icons.reorder_rounded,
-                                size: 16,
-                                color: ac.textTertiary.withValues(alpha: 0.4),
-                              ),
+                              if (e.badge != null) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: ac.accentAmber.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    e.badge!,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: ac.accentAmber,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -328,47 +344,6 @@ class _OverflowCardState extends State<_OverflowCard> {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SegChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _SegChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final ac = context.ac;
-    return Expanded(
-      child: Material(
-        color: selected
-            ? ac.accentFrost.withValues(alpha: 0.18)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? ac.accentFrost : ac.textSecondary,
-              ),
-            ),
           ),
         ),
       ),

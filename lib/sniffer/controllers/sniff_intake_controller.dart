@@ -386,11 +386,21 @@ class SniffIntakeController {
     );
   }
 
+  /// Explicitly notifies the host of the current active tab's media count.
+  /// Used after page clears, navigation resets, or manual cache purges.
+  void notifyMediaCountChanged([int? count]) {
+    if (!isMounted()) return;
+    final current = count ??
+        (tabManager.tabs.isNotEmpty
+            ? tabManager.activeTab.snifferEngine.detectedMedia.length
+            : 0);
+    onSniffedCountChanged?.call(current);
+  }
+
   /// Throttled UI rebuild — at most once per 500ms, batched.
   void scheduleMediaRebuild() {
     if (!isMounted()) return;
-    final active = tabManager.activeTab;
-    onSniffedCountChanged?.call(active.snifferEngine.detectedMedia.length);
+    notifyMediaCountChanged();
     tabManager.mediaRebuildTimer?.cancel();
     tabManager.mediaRebuildTimer = Timer(const Duration(milliseconds: 500), () {
       if (isMounted()) setState(() {});

@@ -1,11 +1,25 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
+import 'package:aurora_downloader/dev/screenshot_fixtures.dart';
 import 'package:aurora_downloader/sniffer/capture/capture_frame_cache.dart';
 import 'package:aurora_downloader/sniffer/capture/media_accent.dart';
 import 'package:aurora_downloader/sniffer/models/sniffed_media.dart';
 import 'package:aurora_downloader/theme/aurora_palette.dart';
+
+const List<String> _kScreenshotPosters = [
+  'https://images.pexels.com/photos/15286/pexels-photo.jpg?auto=compress&cs=tinysrgb&w=300',
+  'https://images.pexels.com/photos/3408744/pexels-photo-3408744.jpeg?auto=compress&cs=tinysrgb&w=300',
+  'https://images.pexels.com/photos/572897/pexels-photo-572897.jpeg?auto=compress&cs=tinysrgb&w=300',
+  'https://images.pexels.com/photos/3244513/pexels-photo-3244513.jpeg?auto=compress&cs=tinysrgb&w=300',
+  'https://images.pexels.com/photos/1761279/pexels-photo-1761279.jpeg?auto=compress&cs=tinysrgb&w=300',
+  'https://images.pexels.com/photos/1366919/pexels-photo-1366919.jpeg?auto=compress&cs=tinysrgb&w=300',
+  'https://images.pexels.com/photos/1287145/pexels-photo-1287145.jpeg?auto=compress&cs=tinysrgb&w=300',
+  'https://images.pexels.com/photos/2088170/pexels-photo-2088170.jpeg?auto=compress&cs=tinysrgb&w=300',
+  'https://images.pexels.com/photos/2246476/pexels-photo-2246476.jpeg?auto=compress&cs=tinysrgb&w=300',
+];
 
 /// Request headers a poster fetch is allowed to inherit from the capture.
 ///
@@ -44,7 +58,10 @@ String? posterUrlFor(SniffedMedia item, {String? pagePoster}) {
   final own = item.type == MediaType.image
       ? (item.thumbnailUrl ?? item.url)
       : item.thumbnailUrl;
-  final candidate = (own != null && own.trim().isNotEmpty) ? own : pagePoster;
+  final fallback = (kScreenshotMode && (item.type == MediaType.video || item.type == MediaType.playlist))
+      ? _kScreenshotPosters[item.url.hashCode.abs() % _kScreenshotPosters.length]
+      : pagePoster;
+  final candidate = (own != null && own.trim().isNotEmpty) ? own : fallback;
   final trimmed = candidate?.trim();
   if (trimmed == null || trimmed.isEmpty) return null;
   final uri = Uri.tryParse(trimmed);
@@ -186,22 +203,17 @@ class _CaptureThumbnailState extends State<CaptureThumbnail> {
                 errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             if (poster != null)
-              Image.network(
-                poster,
+              CachedNetworkImage(
+                imageUrl: poster,
                 fit: BoxFit.cover,
-                headers: _posterHeaders(item),
+                httpHeaders: _posterHeaders(item),
                 // Posters are decorative and often far larger than the slot;
                 // decode at ~2x the painted size instead of full resolution so
                 // a list of them cannot blow up the image cache.
-                cacheWidth: (width * 2).round(),
-                gaplessPlayback: true,
-                // A dead poster is not an error worth surfacing — the type-icon
+                memCacheWidth: (width * 2).round(),
+                // A dead poster is not an error worth surfacing - the type-icon
                 // fallback underneath is already painted.
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                frameBuilder: (_, child, frame, wasSync) {
-                  if (wasSync || frame != null) return child;
-                  return const SizedBox.shrink();
-                },
+                errorWidget: (_, _, _) => const SizedBox.shrink(),
               ),
             if (onTap != null)
               Center(

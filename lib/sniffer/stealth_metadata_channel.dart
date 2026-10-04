@@ -20,10 +20,12 @@ class StealthMetadataChannel {
     required String chromeVersion,
   }) async {
     try {
-      final result = await _channel.invokeMethod<int>('applyStealthMetadata', {
+      final result = await _channel.invokeMethod<dynamic>('applyStealthMetadata', {
         'chromeVersion': chromeVersion,
       });
-      return result ?? 0;
+      if (result is int) return result;
+      if (result == true) return 1;
+      return 0;
     } catch (e) {
       debugPrint('[StealthMetadata] Failed to apply: $e');
       return 0;

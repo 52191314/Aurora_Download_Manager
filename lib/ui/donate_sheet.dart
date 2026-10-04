@@ -61,7 +61,7 @@ class DonateSheet extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'This app is free and open source (GPL-3.0), fully unlocked, with no '
+              'This app is free and open source (GPL-3.0), with no '
               'ads and no trackers. If you would like to support development, '
               'donations are welcome:',
               style: theme.textTheme.bodyMedium

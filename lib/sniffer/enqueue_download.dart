@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,10 @@ import '../downloader/download_rules.dart';
 import '../downloader/downloader.dart';
 import '../downloader/filename_service.dart';
 import '../downloader/url_filename_resolver.dart';
+import '../premium/pro_entitlement.dart';
+import '../premium/pro_upsell_sheet.dart';
 import '../settings/download_settings.dart';
+import '../ui/widgets/torrent_precheck_dialog.dart';
 import 'controllers/site_profile_runtime.dart';
 import 'hls_playlist_cache_lookup.dart';
 import 'models/browser_tab.dart';
@@ -111,6 +115,19 @@ Future<void> enqueueDirectDownload({
   bool silent = false,
   DuplicatePolicy? batchDuplicatePolicy,
 }) async {
+  final isTorrent = url.startsWith('magnet:') ||
+      url.toLowerCase().endsWith('.torrent') ||
+      mediaTypeForRule == 'application/x-bittorrent';
+  if (isTorrent) {
+    final engineErr = await TorrentDownloader.checkNativeEngineAvailability();
+    if (engineErr != null) {
+      if (context.mounted && !silent) {
+        await showTorrentEngineUnavailableDialog(context, reason: engineErr);
+      }
+      return;
+    }
+  }
+
   final media = tab.snifferEngine.detectedMedia
       .where((m) => m.url == url)
       .lastOrNull;

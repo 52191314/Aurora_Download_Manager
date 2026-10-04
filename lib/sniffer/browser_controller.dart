@@ -61,6 +61,7 @@ abstract interface class SnifferBrowserController {
   void setOnUrlChanged(void Function(String url) callback);
   void setOnPageStarted(void Function(String url) callback);
   void setOnPageFinished(void Function(String url) callback);
+  void setOnUpdateVisitedHistory(void Function(String url, bool isReload) callback);
   void setOnScrollPositionChange(void Function(double x, double y) callback);
   void setOnRecreated(void Function() callback);
   void addJavaScriptChannel(
@@ -314,6 +315,7 @@ class SnifferWebViewControllerImpl implements SnifferBrowserController {
   void Function(String)? _onUrlChanged;
   void Function(String)? _onPageStarted;
   void Function(String)? _onPageFinished;
+  void Function(String url, bool isReload)? _onUpdateVisitedHistory;
   void Function(double x, double y)? _onScrollPositionChange;
   void Function(String)? _onIframeMediaDetected;
   void Function(String url, String? suggestedFilename)? _onDownloadStartRequest;
@@ -1057,6 +1059,7 @@ class SnifferWebViewControllerImpl implements SnifferBrowserController {
         _recordHistoryNavigation(urlStr);
       }
       _onUrlChanged?.call(urlStr);
+      _onUpdateVisitedHistory?.call(urlStr, isReload ?? false);
     }
   }
 
@@ -1629,6 +1632,13 @@ class SnifferWebViewControllerImpl implements SnifferBrowserController {
   }
 
   @override
+  void setOnUpdateVisitedHistory(
+    void Function(String url, bool isReload) callback,
+  ) {
+    _onUpdateVisitedHistory = callback;
+  }
+
+  @override
   void setOnScrollPositionChange(void Function(double x, double y) callback) {
     _onScrollPositionChange = callback;
   }
@@ -2127,6 +2137,7 @@ class MockBrowserController implements SnifferBrowserController {
   void Function(String)? _onUrlChanged;
   void Function(String)? _onPageStarted;
   void Function(String)? _onPageFinished;
+  void Function(String url, bool isReload)? _onUpdateVisitedHistory;
 
   final Map<String, void Function(String)> _jsChannels = {};
 
@@ -2553,6 +2564,17 @@ class MockBrowserController implements SnifferBrowserController {
   @override
   void setOnPageFinished(void Function(String url) callback) {
     _onPageFinished = callback;
+  }
+
+  @override
+  void setOnUpdateVisitedHistory(
+    void Function(String url, bool isReload) callback,
+  ) {
+    _onUpdateVisitedHistory = callback;
+  }
+
+  void simulateUpdateVisitedHistory(String url, {bool isReload = false}) {
+    _onUpdateVisitedHistory?.call(url, isReload);
   }
 
   @override

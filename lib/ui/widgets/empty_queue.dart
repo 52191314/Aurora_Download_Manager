@@ -7,11 +7,17 @@ import 'panel.dart';
 class EmptyQueue extends StatefulWidget {
   final String? message;
   final IconData icon;
+  final VoidCallback? onPasteLink;
+  final VoidCallback? onOpenBrowser;
+  final VoidCallback? onAddTorrent;
 
   const EmptyQueue({
     super.key,
     this.message,
     this.icon = Icons.inbox_outlined,
+    this.onPasteLink,
+    this.onOpenBrowser,
+    this.onAddTorrent,
   });
 
   @override
@@ -51,12 +57,19 @@ class _EmptyQueueState extends State<EmptyQueue>
     super.dispose();
   }
 
+  bool get _hasActions =>
+      widget.onPasteLink != null ||
+      widget.onOpenBrowser != null ||
+      widget.onAddTorrent != null;
+
   @override
   Widget build(BuildContext context) {
+    final ac = context.ac;
+    final l10n = AppLocalizations.of(context);
     return Panel(
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -68,27 +81,84 @@ class _EmptyQueueState extends State<EmptyQueue>
                 ),
                 child: Icon(
                   widget.icon,
-                  color: context.ac.textTertiary,
+                  color: ac.textTertiary,
                   size: 48,
                 ),
               ),
               const SizedBox(height: 16),
               Text(
                 widget.message ??
-                    (AppLocalizations.of(context)?.emptyQueueDesc ??
-                        'No downloads yet. Paste a link above to add one.'),
+                    (l10n?.emptyQueueDesc ??
+                        'Paste a link, open the browser, or share a URL from another app.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: 'Inter',
                   fontSize: 14,
-                  color: context.ac.textSecondary,
+                  color: ac.textSecondary,
                   fontWeight: FontWeight.w500,
                 ),
               ),
+              if (_hasActions) ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (widget.onPasteLink != null)
+                      _ActionChip(
+                        icon: Icons.content_paste_rounded,
+                        label: 'Paste link',
+                        onTap: widget.onPasteLink!,
+                      ),
+                    if (widget.onOpenBrowser != null)
+                      _ActionChip(
+                        icon: Icons.travel_explore_rounded,
+                        label: 'Browse the web',
+                        onTap: widget.onOpenBrowser!,
+                      ),
+                    if (widget.onAddTorrent != null)
+                      _ActionChip(
+                        icon: Icons.hub_outlined,
+                        label: 'Magnet / torrent',
+                        onTap: widget.onAddTorrent!,
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ActionChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ac = context.ac;
+    return ActionChip(
+      avatar: Icon(icon, size: 16, color: ac.accentFrost),
+      label: Text(label),
+      labelStyle: TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        color: ac.textPrimary,
+      ),
+      side: BorderSide(color: ac.glassBorder),
+      backgroundColor: ac.surfacePanel,
+      onPressed: onTap,
     );
   }
 }

@@ -13,12 +13,14 @@ import 'models/site_profile.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../compliance/restricted_media_policy.dart';
+import '../dev/screenshot_fixtures.dart';
 import '../downloader/downloader.dart';
 import '../downloader/download_rules.dart';
 import '../platform/network_binding_service.dart';
 import '../premium/free_taste.dart';
 import '../premium/pro_entitlement.dart';
 import '../premium/pro_features.dart';
+import '../premium/premium_flags.dart';
 import '../premium/upsell_controller.dart';
 import 'video_library.dart';
 import '../downloader/headless_webview_fetcher.dart';
@@ -30,7 +32,7 @@ import 'browser_controller.dart';
 import 'browser_library.dart';
 import 'browser_open_request.dart';
 import 'player/playback_engine.dart';
-import '../premium/oss_upsell.dart';
+import '../premium/pro_upsell_sheet.dart';
 import 'controllers/address_bar_controller.dart';
 import 'controllers/element_picker_controller.dart';
 import 'controllers/library_controller.dart';
@@ -67,6 +69,7 @@ import 'enqueue_download.dart';
 import 'external_scheme.dart';
 import 'sheets/external_app_prompt_sheet.dart';
 import 'headless_resniffer.dart';
+import 'resniff_result.dart';
 import 'token_refresh_service.dart';
 import 'hls_variant_fetcher.dart';
 import 'playback_quality.dart';
@@ -493,10 +496,20 @@ class _SnifferScreenState extends State<SnifferScreen>
         setState(() => _addressExpanded = false);
       }
     });
-    _tabLifecycleController.openNewTab();
+    _tabLifecycleController.openNewTab(
+      url: kScreenshotMode ? 'https://www.pexels.com/videos/' : null,
+    );
     unawaited(_initPaths().then((_) => _libraryController.load()));
     unawaited(_loadAutofillProfiles());
     widget.libraryUpdateNotifier?.addListener(_onLibraryUpdate);
+    MiniPlayerController.instance.revision.addListener(_onMiniPlayerRevisionChanged);
+  }
+
+  void _onMiniPlayerRevisionChanged() {
+    if (mounted && widget.isShellVisible) {
+      unawaited(_resumeBrowserShell());
+      setState(() {});
+    }
   }
 
   void _onLibraryUpdate() {
@@ -1130,35 +1143,48 @@ class _SnifferScreenState extends State<SnifferScreen>
     _openTabsAfterActive(trimmed);
   }
 
-  /// Inserts each URL as a new tab after the active one, preserving order.
-  /// If the current active tab is blank, navigates it to the first URL directly.
-  /// Background tabs defer startup initialization until first user activation.
+  /// Inserts each URL as a new background tab right after the active one,
+  /// preserving order. Each insert lands at the same relative position.
+  /// Deduplicates against currently open tabs so import does not create duplicate tabs.
+  /// If the current active tab is blank, navigates it to the first imported URL.
   void _openTabsAfterActive(List<String> urls) {
     if (!mounted || _tabs.isEmpty || urls.isEmpty) return;
+    final existingUrls = _tabs
+        .map((t) => (t.currentUrl ?? t.committedMainFrameUrl ?? t.addressController.text).trim().toLowerCase())
+        .where((u) => u.isNotEmpty)
+        .toSet();
+    final uniqueUrls = <String>[];
+    final seen = <String>{};
+    for (final url in urls) {
+      final trimmed = url.trim();
+      final lower = trimmed.toLowerCase();
+      if (trimmed.isNotEmpty && !existingUrls.contains(lower) && !seen.contains(lower)) {
+        seen.add(lower);
+        uniqueUrls.add(trimmed);
+      }
+    }
+    if (uniqueUrls.isEmpty) return;
 
-    final activeTab = _activeTab;
-    final activeUrl = (activeTab.currentUrl ??
-            activeTab.committedMainFrameUrl ??
-            activeTab.addressController.text)
+    final activeUrl = (_activeTab.currentUrl ??
+            _activeTab.committedMainFrameUrl ??
+            _activeTab.addressController.text)
         .trim();
-    final isActiveBlank = activeUrl.isEmpty ||
-        activeUrl == 'about:blank' ||
-        activeUrl == 'https://about:blank';
+    final isActiveTabBlank = activeUrl.isEmpty || activeUrl == 'about:blank';
 
-    var remainingUrls = urls;
-    if (isActiveBlank && urls.isNotEmpty) {
-      final firstUrl = urls.first;
+    List<String> urlsToInsertAsBackground = uniqueUrls;
+    if (isActiveTabBlank) {
+      final firstUrl = uniqueUrls.first;
       _navigateActiveTabToExternalUrl(firstUrl);
-      remainingUrls = urls.sublist(1);
+      urlsToInsertAsBackground = uniqueUrls.skip(1).toList();
     }
 
     var insertAt = _activeTabIndex + 1;
-    for (final url in remainingUrls) {
+    for (final url in urlsToInsertAsBackground) {
       _tabLifecycleController.openNewTab(
         url: url,
         switchToTab: false,
-        insertAtIndex: insertAt,
         deferStartupWork: true,
+        insertAtIndex: insertAt,
       );
       insertAt++;
     }
@@ -1410,6 +1436,7 @@ class _SnifferScreenState extends State<SnifferScreen>
     widget.controller?.setOnOpenUrlInNewTab(null);
     widget.controller?.setOnOpenUrlsInNewTabs(null);
     widget.openRequestBus?.removeListener(_onOpenRequestBus);
+    MiniPlayerController.instance.revision.removeListener(_onMiniPlayerRevisionChanged);
     _tabManager.dispose();
     super.dispose();
   }
@@ -1550,6 +1577,11 @@ class _SnifferScreenState extends State<SnifferScreen>
   /// after the user taps a star reads as a broken button.
   Future<void> _saveVideoFavorite(SniffedMedia media) async {
     final tier = proUpsellEntitlement?.tier ?? EntitlementTier.free;
+    final pageUrl = (media.sourcePageUrl != null && media.sourcePageUrl!.trim().isNotEmpty)
+        ? media.sourcePageUrl!.trim()
+        : (_activeTab.currentUrl?.trim().isNotEmpty == true
+            ? _activeTab.currentUrl!.trim()
+            : _activeTab.addressController.text.trim());
     final result = await VideoLibrary.addFavorite(
       library: _library,
       tier: tier,
@@ -1558,7 +1590,7 @@ class _SnifferScreenState extends State<SnifferScreen>
           ? media.pageTitle!.trim()
           : media.name,
       thumbnailUrl: media.thumbnailUrl,
-      sourcePageUrl: media.sourcePageUrl,
+      sourcePageUrl: pageUrl.isNotEmpty ? pageUrl : null,
     );
     if (!mounted) return;
 
@@ -1583,6 +1615,11 @@ class _SnifferScreenState extends State<SnifferScreen>
   /// failing to record a watch must never interrupt playback.
   void _recordVideoPlay(SniffedMedia media) {
     final tier = proUpsellEntitlement?.tier ?? EntitlementTier.free;
+    final pageUrl = (media.sourcePageUrl != null && media.sourcePageUrl!.trim().isNotEmpty)
+        ? media.sourcePageUrl!.trim()
+        : (_activeTab.currentUrl?.trim().isNotEmpty == true
+            ? _activeTab.currentUrl!.trim()
+            : _activeTab.addressController.text.trim());
     final updated = VideoLibrary.recordPlay(
       library: _library,
       tier: tier,
@@ -1591,7 +1628,7 @@ class _SnifferScreenState extends State<SnifferScreen>
           ? media.pageTitle!.trim()
           : media.name,
       thumbnailUrl: media.thumbnailUrl,
-      sourcePageUrl: media.sourcePageUrl,
+      sourcePageUrl: pageUrl.isNotEmpty ? pageUrl : null,
     );
     unawaited(_saveLibrary(updated));
   }
@@ -2948,18 +2985,54 @@ class _SnifferScreenState extends State<SnifferScreen>
     }
 
     var toEnqueue = result.media;
-    if (decision.allowedCount != null &&
+    final isProUser = proUpsellEntitlement?.isPro ?? false;
+    if (!isProUser &&
+        decision.allowedCount != null &&
         decision.allowedCount! < result.media.length) {
-      toEnqueue = result.media.take(decision.allowedCount!).toList();
-      if (mounted) {
-        unawaited(
-          UpsellController.show(
-            context,
-            feature: ProFeature.batchCapture,
-            userTier: tier,
+      final allowed = decision.allowedCount!;
+      final shouldProceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: Colors.amber, size: 20),
+              const SizedBox(width: 8),
+              Flexible(child: Text('Batch Download (${result.media.length} videos)')),
+            ],
           ),
-        );
-      }
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Free taste will download the first $allowed video(s). Upgrade to Pro for unlimited batch downloading on any page.',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop(false);
+                unawaited(
+                  showProUpsell(
+                    context,
+                    ProFeature.batchCapture,
+                    userTier: tier,
+                  ),
+                );
+              },
+              child: const Text('Unlock Pro'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text('Download $allowed Free'),
+            ),
+          ],
+        ),
+      );
+      if (shouldProceed != true) return;
+      toEnqueue = result.media.take(allowed).toList();
     }
 
     // --- Enqueue all, with WinRAR-style duplicate handling ---
@@ -3498,6 +3571,9 @@ class _SnifferScreenState extends State<SnifferScreen>
                 if (fromCurrent != null && fromCurrent.isNotEmpty) {
                   return fromCurrent;
                 }
+                if (kScreenshotMode) {
+                  return 'https://www.pexels.com/videos/';
+                }
                 return null;
               }();
               return Positioned.fill(
@@ -3621,6 +3697,8 @@ class _SnifferScreenState extends State<SnifferScreen>
             onMenu: _showBrowserOverflowPopup,
             onQueue: widget.onOpenQueue,
             onBookmarksMenu: _showFavoritesSheet,
+            onBackScreenshot: () => widget.onOpenSettingsSection?.call(SettingsSection.drive),
+            onForwardScreenshot: () => widget.onOpenSettingsSection?.call(SettingsSection.adblock),
             menuKey: widget.menuKey,
             snifferKey: widget.snifferKey,
             tabsKey: widget.tabsKey,
@@ -3827,6 +3905,7 @@ class _SnifferScreenState extends State<SnifferScreen>
   Future<String?> _reloadForFreshUrl(
     BrowserTab tab,
     String? sourcePageUrl, {
+    String? originalMediaUrl,
     bool forceReload = false,
   }) async {
     // Strategy 1: Query the current page's DOM for any .m3u8 URL
@@ -3843,11 +3922,12 @@ class _SnifferScreenState extends State<SnifferScreen>
     final srcUrl = sourcePageUrl ?? tab.addressController.text;
     if (srcUrl.startsWith('http')) {
       final resniffer = HeadlessPageResniffer();
-      final fromHeadless = await resniffer.resniff(
+      final resniffResult = await resniffer.resniff(
         srcUrl,
-        mustMatchPathOf: tab.currentUrl,
+        originalMediaUrl: originalMediaUrl,
       );
-      if (fromHeadless != null) return fromHeadless;
+      if (resniffResult.isSuccess) return resniffResult.freshUrl;
+      if (resniffResult is ResniffUnchanged) return resniffResult.url;
     }
 
     // Strategy 3: Wait for the sniffer's MediaSnifferDataChannel handler
@@ -4011,28 +4091,38 @@ class _SnifferScreenState extends State<SnifferScreen>
     createdAt: DateTime.fromMillisecondsSinceEpoch(0),
   );
 
-  void _showFavoritesSheet() => showFavoritesSheet(
-    context,
-    activeTab: _activeTab,
-    library: _library,
-    unsortedFolder: _unsortedFolder,
-    isCurrentPageFavorited: (_) => _isCurrentPageFavorited(),
-    onSaveLibrary: _saveLibrary,
-    onLoadUrl: (url) => _loadUrlWithHostSettings(_activeTab, Uri.parse(url)),
-    onFavoriteToggled: () => setState(() {}),
-    onNewFolderCreated: () async {
-      if (mounted) {
-        setState(() {});
+  void _showFavoritesSheet() {
+    if (kScreenshotMode) {
+      final video = _activeTab.snifferEngine.detectedMedia
+          .firstWhereOrNull((m) => m.type == MediaType.video);
+      if (video != null) {
+        unawaited(_openVideoPlayer(video));
+        return;
       }
-    },
-    onEditFavorite: (favorite) => _editFavoriteFolder(favorite),
-    onPlayVideo: (favorite) => _playLibraryVideo(
-      url: favorite.url,
-      title: favorite.title,
-      sourcePageUrl: favorite.sourcePageUrl,
-      thumbnailUrl: favorite.thumbnailUrl,
-    ),
-  );
+    }
+    showFavoritesSheet(
+      context,
+      activeTab: _activeTab,
+      library: _library,
+      unsortedFolder: _unsortedFolder,
+      isCurrentPageFavorited: (_) => _isCurrentPageFavorited(),
+      onSaveLibrary: _saveLibrary,
+      onLoadUrl: (url) => _loadUrlWithHostSettings(_activeTab, Uri.parse(url)),
+      onFavoriteToggled: () => setState(() {}),
+      onNewFolderCreated: () async {
+        if (mounted) {
+          setState(() {});
+        }
+      },
+      onEditFavorite: (favorite) => _editFavoriteFolder(favorite),
+      onPlayVideo: (favorite) => _playLibraryVideo(
+        url: favorite.url,
+        title: favorite.title,
+        sourcePageUrl: favorite.sourcePageUrl,
+        thumbnailUrl: favorite.thumbnailUrl,
+      ),
+    );
+  }
 
   /// Replays a video stored in Favorites or History.
   ///
@@ -4176,14 +4266,22 @@ class _SnifferScreenState extends State<SnifferScreen>
         label: l?.menuBackup ?? 'Backup',
         onTap: () => unawaited(openSection(SettingsSection.backup)),
       ),
+      if (kDriveSyncEnabled)
+        OverflowMenuEntry(
+          icon: Icons.cloud_outlined,
+          label: l?.menuGoogleDrive ?? 'Google Drive',
+          onTap: () => unawaited(openSection(SettingsSection.drive)),
+        ),
       OverflowMenuEntry(
         icon: Icons.cloud_outlined,
         label: l?.menuWebdavBackup ?? 'WebDAV Backup',
+        badge: (proUpsellEntitlement?.isPro ?? false) ? null : 'PRO',
         onTap: () => unawaited(openSection(SettingsSection.webdav)),
       ),
       OverflowMenuEntry(
         icon: Icons.shield_outlined,
         label: l?.menuPrivateVault ?? 'Private Vault',
+        badge: (proUpsellEntitlement?.isPro ?? false) ? null : 'PRO',
         onTap: () => unawaited(openSection(SettingsSection.vault)),
       ),
       // 5. Advanced & Automation
@@ -4196,11 +4294,13 @@ class _SnifferScreenState extends State<SnifferScreen>
       OverflowMenuEntry(
         icon: Icons.rss_feed,
         label: l?.menuWatcher ?? 'Aurora Watcher',
+        badge: (proUpsellEntitlement?.isPro ?? false) ? null : 'PRO',
         onTap: () => unawaited(openSection(SettingsSection.watcher)),
       ),
       OverflowMenuEntry(
         icon: Icons.api,
         label: l?.menuAutomationApi ?? 'Automation API',
+        badge: (proUpsellEntitlement?.isPro ?? false) ? null : 'PRO',
         onTap: () => unawaited(openSection(SettingsSection.automation)),
       ),
       // 6. Help & Info
@@ -4317,6 +4417,7 @@ class _SnifferScreenState extends State<SnifferScreen>
       OverflowMenuEntry(
         icon: Icons.playlist_add_rounded,
         label: l?.toolBatchDownload ?? 'Download all on this page',
+        badge: (proUpsellEntitlement?.isPro ?? false) ? null : 'PRO',
         color: ac.accentFrost,
         onTap: () => unawaited(_runListingBatchDownload()),
       ),
@@ -4453,13 +4554,27 @@ class _SnifferScreenState extends State<SnifferScreen>
     if (MiniPlayerController.instance.isActive) {
       await MiniPlayerController.instance.close();
     }
+    final pageUrl = (media.sourcePageUrl != null &&
+            media.sourcePageUrl!.trim().isNotEmpty)
+        ? media.sourcePageUrl!.trim()
+        : (_activeTab.currentUrl?.trim().isNotEmpty == true
+            ? _activeTab.currentUrl!.trim()
+            : _activeTab.addressController.text.trim());
+    final effectiveMedia = (media.sourcePageUrl != null &&
+            media.sourcePageUrl!.trim().isNotEmpty)
+        ? media
+        : media.copyWith(sourcePageUrl: pageUrl.isNotEmpty ? pageUrl : null);
+
     final qualities = await _resolvePlaybackQualities(
-      media,
+      effectiveMedia,
       groupVariants: groupVariants,
     );
-    final start = pickStartQuality(media, qualities);
+    final start = pickStartQuality(effectiveMedia, qualities);
     if (!mounted) return;
     await _showMediaPreview(start, qualityVariants: qualities);
+    if (mounted && widget.isShellVisible) {
+      await _resumeBrowserShell();
+    }
   }
 
   /// Collects alternate renditions for [media]: capture-group siblings,
@@ -4638,11 +4753,20 @@ class _SnifferScreenState extends State<SnifferScreen>
   /// Positions [FloatingVideoButton] on the largest video rect from JS, or
   /// falls back to the lower-right of the WebView (above the bottom strip).
   Widget _buildFloatingPlayerOverlay(double toolbarHeight) {
+    final media = _videoForActiveTabPlayback();
     return buildFloatingPlayerOverlay(
       toolbarHeight: toolbarHeight,
-      media: _videoForActiveTabPlayback(),
+      media: media,
       videoFloatRect: _videoFloatRect,
-      onTap: () => unawaited(_openFloatingPlayer()),
+      onTap: () {
+        if (media != null) {
+          _showAddQueueDialog(context, media);
+        } else {
+          unawaited(_openFloatingPlayer());
+        }
+      },
+      onDownload: media != null ? () => _showAddQueueDialog(context, media) : null,
+      onPlay: () => unawaited(_openFloatingPlayer()),
       onDismiss: () {
         final pageUrl = _activeTab.addressController.text.trim();
         setState(() {
@@ -4657,20 +4781,40 @@ class _SnifferScreenState extends State<SnifferScreen>
   /// engine is borrowed ([MiniPlayerController] stays the owner), so the
   /// video continues from its current position without a rebuffer, and
   /// popping that route minimizes it again.
-  void _expandMiniPlayer() {
+  void _expandMiniPlayer() async {
     final controller = MiniPlayerController.instance;
     final engine = controller.engine;
     final source = controller.source;
     if (engine == null || source == null || !mounted) return;
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => AuroraPlayerScreen(
           source: source,
           initialEngine: engine.kind,
           adoptEngine: engine,
+          onFavorite: (url) => _saveVideoFavorite(
+            SniffedMedia(
+              url: source.url,
+              name: source.title,
+              type: MediaType.video,
+              sourcePageUrl: source.sourcePageUrl,
+            ),
+          ),
+          onDownload: () {
+            final media = SniffedMedia(
+              url: source.url,
+              name: source.title,
+              type: MediaType.video,
+              sourcePageUrl: source.sourcePageUrl,
+            );
+            _showAddQueueDialog(context, media);
+          },
         ),
       ),
     );
+    if (mounted && widget.isShellVisible) {
+      await _resumeBrowserShell();
+    }
   }
 
   /// Handles JS [AuroraPlayChannel] when replace-site-player is on.
@@ -5211,6 +5355,7 @@ class _SnifferScreenState extends State<SnifferScreen>
       onTokenExpired: ({bool forceReload = false}) => _reloadForFreshUrl(
         tab,
         media.sourcePageUrl,
+        originalMediaUrl: media.url,
         forceReload: forceReload,
       ),
     );

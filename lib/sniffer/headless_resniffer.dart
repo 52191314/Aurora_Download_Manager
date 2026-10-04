@@ -2,44 +2,394 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-/// DOM query JS that mirrors [_queryHlsFromPage] in `sniffer_screen.dart`:
-/// finds the first non-ping `.m3u8` URL in <source>, <video>/<audio>, or
-/// inline <script> text.
-const String _kHlsDomQueryJs = '''
+import 'resniff_result.dart';
+import 'stream_matcher.dart';
+
+
+/// JavaScript for detecting Cloudflare Turnstile, Cloudflare Challenge, reCAPTCHA,
+/// hCaptcha, or generic WAF verification pages in the DOM.
+const String _kChallengeDetectionJs = r'''
 (() => {
-  function findHls(root) {
-    if (!root || !root.querySelectorAll) return '';
-    const sources = root.querySelectorAll('source[src]');
-    for (const s of sources) {
-      const src = s.src || s.getAttribute('src') || '';
-      if (src && src.indexOf('.m3u8') !== -1 && src.indexOf('ping.m3u8') === -1 && src.indexOf('/ping') === -1) return src;
-    }
-    const medias = root.querySelectorAll('video, audio');
-    for (const m of medias) {
-      const src = m.currentSrc || m.src || '';
-      if (src && src.indexOf('.m3u8') !== -1 && src.indexOf('ping.m3u8') === -1 && src.indexOf('/ping') === -1) return src;
-    }
-    const scripts = root.querySelectorAll('script');
-    for (const sc of scripts) {
-      const text = sc.textContent || '';
-      const match = text.match(/(?:https?:)?\\?/\\?/[^"\\s]+\\.m3u8[^"\\s]*/);
-      if (match) {
-        let u = match[0];
-        if (u.indexOf('//') === 0) u = 'https:' + u;
-        if (u.indexOf('ping.m3u8') === -1 && u.indexOf('/ping') === -1) return u;
+  try {
+    const title = (document.title || '').toLowerCase();
+    const bodyText = (document.body ? document.body.innerText || document.body.textContent || '' : '').toLowerCase();
+
+    // 1. Cloudflare Turnstile / Challenge
+    const cfSelectors = [
+      '#challenge-stage',
+      '#cf-turnstile-wrapper',
+      '#cf-challenge-running',
+      '.cf-turnstile',
+      '#challenge-form',
+      '.cf-browser-verification',
+      '#cf-wrapper',
+      'iframe[src*="challenges.cloudflare.com"]',
+      'iframe[src*="turnstile"]',
+      '#turnstile-wrapper'
+    ];
+    for (const sel of cfSelectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        return JSON.stringify({
+          detected: true,
+          type: 'cloudflare_turnstile',
+          details: 'Cloudflare Turnstile challenge element detected (' + sel + ')'
+        });
       }
     }
-    return '';
+    if (title.includes('just a moment...') ||
+        title.includes('attention required! | cloudflare') ||
+        (title.includes('cloudflare') && title.includes('moment'))) {
+      return JSON.stringify({
+        detected: true,
+        type: 'cloudflare_turnstile',
+        details: 'Cloudflare challenge page title detected: "' + document.title + '"'
+      });
+    }
+    if (bodyText.includes('verify you are human') && (bodyText.includes('cloudflare') || document.querySelector('#challenge-running'))) {
+      return JSON.stringify({
+        detected: true,
+        type: 'cloudflare_turnstile',
+        details: 'Cloudflare human verification text detected'
+      });
+    }
+
+    // 2. reCAPTCHA
+    const recaptchaSelectors = [
+      '.g-recaptcha',
+      '#g-recaptcha',
+      'iframe[src*="google.com/recaptcha"]',
+      'iframe[src*="recaptcha"]',
+      '#recaptcha',
+      '.recaptcha'
+    ];
+    for (const sel of recaptchaSelectors) {
+      if (document.querySelector(sel)) {
+        return JSON.stringify({
+          detected: true,
+          type: 'recaptcha',
+          details: 'reCAPTCHA challenge element detected (' + sel + ')'
+        });
+      }
+    }
+
+    // 3. hCaptcha
+    const hcaptchaSelectors = [
+      '.h-captcha',
+      '#h-captcha',
+      'iframe[src*="hcaptcha.com"]',
+      'iframe[src*="hcaptcha"]'
+    ];
+    for (const sel of hcaptchaSelectors) {
+      if (document.querySelector(sel)) {
+        return JSON.stringify({
+          detected: true,
+          type: 'hcaptcha',
+          details: 'hCaptcha challenge element detected (' + sel + ')'
+        });
+      }
+    }
+
+    // 4. Generic WAF / Bot Block
+    const wafSelectors = [
+      '#ddos-guard',
+      '.ddos-guard',
+      '#waf-block',
+      '.waf-block',
+      '#waf-challenge'
+    ];
+    for (const sel of wafSelectors) {
+      if (document.querySelector(sel)) {
+        return JSON.stringify({
+          detected: true,
+          type: 'generic_waf',
+          details: 'WAF challenge element detected (' + sel + ')'
+        });
+      }
+    }
+    if (title.includes('access denied') ||
+        title.includes('403 forbidden') ||
+        title.includes('ddos-guard') ||
+        title.includes('security check')) {
+      return JSON.stringify({
+        detected: true,
+        type: 'generic_waf',
+        details: 'WAF block page title detected: "' + document.title + '"'
+      });
+    }
+  } catch (e) {
+    return JSON.stringify({ detected: false, error: e.toString() });
   }
-  const r = findHls(document);
-  if (r) return r;
-  const iframes = document.querySelectorAll('iframe');
-  for (const f of iframes) {
-    try { const fr = f.contentDocument; if (fr) { const ir = findHls(fr); if (ir) return ir; } } catch (_) {}
+  return JSON.stringify({ detected: false });
+})();
+''';
+
+/// JavaScript that inspects the DOM and Performance API for all candidate media URLs.
+const String _kMultiMediaCandidatesJs = r'''
+(() => {
+  try {
+    const out = new Set();
+    const mediaExtRegex = /\.(m3u8|mpd|mp4|m4s|webm|ts|mkv)(?!\w)/i;
+
+    function addUrl(u) {
+      if (!u || typeof u !== 'string') return;
+      let clean = u.trim().replace(/\\\/|\/\\/g, '/');
+      if (clean.indexOf('//') === 0) clean = 'https:' + clean;
+      if (clean.startsWith('http://') || clean.startsWith('https://')) {
+        if (clean.indexOf('ping.m3u8') === -1 && clean.indexOf('/ping') === -1) {
+          out.add(clean);
+        }
+      }
+    }
+
+    function scanDom(root) {
+      if (!root || !root.querySelectorAll) return;
+
+      // 1. Source tags
+      const sources = root.querySelectorAll('source[src], source[data-src]');
+      for (const s of sources) {
+        addUrl(s.src || s.getAttribute('src') || s.getAttribute('data-src'));
+      }
+
+      // 2. Video / Audio tags
+      const medias = root.querySelectorAll('video, audio');
+      for (const m of medias) {
+        addUrl(m.currentSrc);
+        addUrl(m.src);
+        addUrl(m.getAttribute('src'));
+        addUrl(m.getAttribute('data-src'));
+      }
+
+      // 3. Meta tags
+      const metas = root.querySelectorAll('meta[property="og:video"], meta[property="og:video:url"], meta[property="og:video:secure_url"], meta[property="twitter:player:stream"], meta[itemprop="contentURL"]');
+      for (const mt of metas) {
+        addUrl(mt.content || mt.getAttribute('content'));
+      }
+
+      // 4. Inline Scripts
+      const scripts = root.querySelectorAll('script');
+      for (const sc of scripts) {
+        const text = sc.textContent || '';
+        if (text.length > 500000) continue; // skip massive bundles
+        const re = /(?:https?:)?\\?\/\\?\/[^"'`\s<>]+?\.(?:m3u8|mpd|mp4|m4s|webm|ts|mkv)(?!\w)[^"'`\s<>]*/gi;
+        let match;
+        while ((match = re.exec(text)) !== null) {
+          addUrl(match[0]);
+        }
+      }
+    }
+
+    // Scan main document
+    scanDom(document);
+
+    // Scan accessible iframes
+    const iframes = document.querySelectorAll('iframe');
+    for (const f of iframes) {
+      try {
+        const fr = f.contentDocument;
+        if (fr) scanDom(fr);
+      } catch (_) {}
+    }
+
+    // 5. Global Player JS objects
+    try {
+      if (window.videojs && typeof window.videojs.getAllPlayers === 'function') {
+        const players = window.videojs.getAllPlayers();
+        for (const p of players) {
+          if (p && typeof p.currentSrc === 'function') addUrl(p.currentSrc());
+          if (p && typeof p.src === 'function') addUrl(p.src());
+        }
+      }
+    } catch (_) {}
+
+    try {
+      if (window.jwplayer && typeof window.jwplayer === 'function') {
+        const jw = window.jwplayer();
+        if (jw) {
+          if (typeof jw.getPlaylist === 'function') {
+            const pl = jw.getPlaylist();
+            if (Array.isArray(pl)) {
+              for (const item of pl) {
+                if (item.file) addUrl(item.file);
+                if (Array.isArray(item.sources)) {
+                  for (const src of item.sources) {
+                    if (src && src.file) addUrl(src.file);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    try {
+      if (window.player) {
+        if (typeof window.player.src === 'string') addUrl(window.player.src);
+        if (window.player.options && window.player.options.url) addUrl(window.player.options.url);
+      }
+      if (window.playerInstance && typeof window.playerInstance.src === 'string') {
+        addUrl(window.playerInstance.src);
+      }
+      if (window.hls && typeof window.hls.url === 'string') {
+        addUrl(window.hls.url);
+      }
+      if (window.dp && window.dp.video && window.dp.video.src) {
+        addUrl(window.dp.video.src);
+      }
+    } catch (_) {}
+
+    // 6. Performance resource entries
+    try {
+      const entries = performance.getEntriesByType('resource');
+      for (const e of entries) {
+        const u = e.name;
+        if (u && mediaExtRegex.test(u)) {
+          addUrl(u);
+        } else if (e.initiatorType === 'media' || e.initiatorType === 'video' || e.initiatorType === 'audio') {
+          addUrl(u);
+        }
+      }
+    } catch (_) {}
+
+    return JSON.stringify(Array.from(out));
+  } catch (err) {
+    return '[]';
   }
-  return '';
+})();
+''';
+
+/// JavaScript to check if an unplayed player or overlay button is present on the page.
+const String _kPlayerStatusCheckJs = r'''
+(() => {
+  try {
+    const videos = document.querySelectorAll('video, audio');
+    let hasPlayer = false;
+    let isPlaying = false;
+    let details = '';
+
+    if (videos.length > 0) {
+      hasPlayer = true;
+      for (const v of videos) {
+        if (!v.paused && !v.ended && v.readyState > 2) {
+          isPlaying = true;
+        }
+      }
+      if (!isPlaying) {
+        details = 'Found ' + videos.length + ' video element(s) in paused or unplayed state.';
+      }
+    }
+
+    const playerWrappers = document.querySelectorAll('.video-js, .plyr, .jwplayer, .dplayer, [class*="player-container"], [class*="video-player"]');
+    if (playerWrappers.length > 0) {
+      hasPlayer = true;
+      if (!details) {
+        details = 'Embedded video player container detected on page.';
+      }
+    }
+
+    const playButtons = document.querySelectorAll('.vjs-big-play-button, .plyr__control--overlaid, .jw-display-icon-container, [class*="play-button" i], [aria-label*="Play" i]');
+    if (playButtons.length > 0) {
+      hasPlayer = true;
+      if (!details) {
+        details = 'Play button overlay detected requiring user gesture.';
+      }
+    }
+
+    return JSON.stringify({
+      hasPlayer: hasPlayer,
+      isPlaying: isPlaying,
+      details: details
+    });
+  } catch (e) {
+    return JSON.stringify({ hasPlayer: false, isPlaying: false, details: '' });
+  }
+})();
+''';
+
+/// JavaScript for executing robust player wake gestures.
+const String _kWakePlayerJs = r'''
+(() => {
+  try {
+    // 1. Mute and trigger play on all video/audio elements
+    const medias = document.querySelectorAll('video, audio');
+    for (const m of medias) {
+      try {
+        m.muted = true;
+        m.playsInline = true;
+        m.setAttribute('playsinline', '');
+        m.setAttribute('webkit-playsinline', '');
+        m.setAttribute('autoplay', '');
+        const p = m.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {});
+        }
+      } catch (_) {}
+    }
+
+    // 2. Click play buttons and dispatch pointer/mouse/touch events
+    const playSelectors = [
+      '.vjs-big-play-button',
+      '.plyr__control--overlaid',
+      '.jw-preview',
+      '.jw-display-icon-container',
+      '.jw-overlay',
+      '[class*="play-button" i]',
+      '[class*="play_button" i]',
+      '[class*="playBtn" i]',
+      '[class*="play-btn" i]',
+      '.play-btn',
+      '.big-play-button',
+      '.vjs-play-control',
+      '.mejs__overlay-play',
+      '[aria-label*="Play" i]',
+      '[title*="Play" i]'
+    ];
+
+    function dispatchInteractiveEvents(el) {
+      if (!el) return;
+      try {
+        el.click();
+      } catch (_) {}
+      try {
+        if (window.PointerEvent) {
+          el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'touch' }));
+          el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerType: 'touch' }));
+        }
+      } catch (_) {}
+      try {
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      } catch (_) {}
+      try {
+        if (window.TouchEvent) {
+          el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true }));
+          el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true }));
+        }
+      } catch (_) {}
+    }
+
+    for (const sel of playSelectors) {
+      const btns = document.querySelectorAll(sel);
+      for (const btn of btns) {
+        dispatchInteractiveEvents(btn);
+      }
+    }
+
+    // 3. Click closest player wrappers
+    for (const m of medias) {
+      const wrap = m.closest('[class*=player i], [id*=player i]');
+      if (wrap) {
+        dispatchInteractiveEvents(wrap);
+      }
+    }
+
+    return true;
+  } catch (_) {
+    return false;
+  }
 })();
 ''';
 
@@ -70,167 +420,394 @@ Future<List<String>?> pollUntilFound(
   return null;
 }
 
-/// A single-use headless page loader that navigates to a source page,
-/// waits for the page to render, then queries the DOM for a fresh HLS
-/// playlist URL (identical to [_queryHlsFromPage] but without a visible
-/// [BrowserTab]).
-///
-/// Created by [HeadlessPageResniffer.resniff] and disposed automatically
-/// after the first result or timeout.  The caller must NOT reuse the
-/// instance.
-///
-/// ## Why this exists
-///
-/// `_reloadForFreshUrl` (in `sniffer_screen.dart`) previously called
-/// `tab.controller.loadRequest()` on a **visible** browser tab, hijacking
-/// whatever the user was watching.  This component runs the same DOM query
-/// in a **headless** WebView — the user never sees the page load.
+/// A high-fidelity headless page resniffer that navigates to a source page in a
+/// headless WebView, sharing session cookies and DOM storage with the main
+/// browser, querying the rendered DOM and network performance entries for fresh
+/// media stream URLs, and categorizing outcomes into strongly-typed [ResniffResult]s.
 class HeadlessPageResniffer {
   HeadlessInAppWebView? _headless;
   InAppWebViewController? _controller;
   bool _isDisposed = false;
 
-  static const Duration _pageLoadTimeout = Duration(seconds: 15);
+  static const Duration _defaultTimeout = Duration(seconds: 20);
   static const Duration _jsGracePeriod = Duration(seconds: 3);
   static const Duration _resourcePollDelay = Duration(seconds: 1);
 
-  /// Loads [sourcePageUrl] in a headless HeadlessInAppWebView, waits for
-  /// the page to render, queries the DOM for a playlist URL, and returns
-  /// it (or null if nothing was found).
+  /// Loads [sourcePageUrl] in a headless WebView sharing session cookies and
+  /// persistent storage with interactive tabs (`incognito: false`), waits for the
+  /// page to render, queries the DOM and performance entries for candidate media URLs,
+  /// and evaluates them against [originalMediaUrl] using [StreamMatcher].
   ///
-  /// If [mustMatchPathOf] is provided, the returned URL's path must match
-  /// that of the given URL (query may differ — that's the token).  This
-  /// prevents picking up a completely unrelated stream from the same page.
-  Future<String?> resniff(
+  /// Returns a strongly-typed [ResniffResult] indicating success, unchanged link,
+  /// challenge block, timeout, dead link (HTTP 404/410/DNS), or missing media.
+  Future<ResniffResult> resniff(
     String sourcePageUrl, {
+    String? originalMediaUrl,
     String? mustMatchPathOf,
+    Map<String, String>? headers,
+    Duration timeout = _defaultTimeout,
   }) async {
-    if (!Platform.isAndroid && !Platform.isIOS) return null;
-    if (_isDisposed) return null;
-    if (!sourcePageUrl.startsWith('http')) return null;
+    final effectiveOriginalUrl = originalMediaUrl ?? mustMatchPathOf;
+    if (_isDisposed) {
+      return const ResniffNoMediaFound(details: 'Resniffer is disposed.');
+    }
+    if (!sourcePageUrl.startsWith('http://') && !sourcePageUrl.startsWith('https://')) {
+      return ResniffSourceUnavailable(
+        error: 'Invalid source URL: $sourcePageUrl',
+      );
+    }
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return const ResniffNoMediaFound(
+        details: 'Headless WebView is only supported on mobile platforms (Android/iOS).',
+      );
+    }
 
     final loadCompleter = Completer<bool>();
+    ResniffSourceUnavailable? earlyHttpError;
+    String lastState = 'initializing';
+    final startTime = DateTime.now();
 
     try {
       _headless = HeadlessInAppWebView(
-        initialUrlRequest: URLRequest(url: WebUri(sourcePageUrl)),
+        initialUrlRequest: URLRequest(
+          url: WebUri(sourcePageUrl),
+          headers: headers,
+        ),
         initialSettings: InAppWebViewSettings(
-          incognito: true,
+          incognito: false,
           javaScriptEnabled: true,
           domStorageEnabled: true,
           databaseEnabled: true,
+          cacheEnabled: true,
+          cacheMode: CacheMode.LOAD_DEFAULT,
           mediaPlaybackRequiresUserGesture: false,
           useShouldOverrideUrlLoading: true,
           useOnLoadResource: false,
           useShouldInterceptRequest: true,
         ),
+        onLoadStart: (controller, url) {
+          lastState = 'loading_page';
+        },
         onLoadStop: (controller, url) {
+          lastState = 'page_loaded';
           if (!loadCompleter.isCompleted) {
             loadCompleter.complete(true);
           }
         },
+        onReceivedHttpError: (controller, request, errorResponse) {
+          if (request.isForMainFrame == true) {
+            final code = errorResponse.statusCode;
+            if (code != null && code >= 400) {
+              earlyHttpError = ResniffSourceUnavailable(
+                statusCode: code,
+                error: errorResponse.reasonPhrase ?? 'HTTP $code Error',
+              );
+              if (!loadCompleter.isCompleted) {
+                loadCompleter.complete(false);
+              }
+            }
+          }
+        },
         onReceivedError: (controller, request, error) {
-          if (request.isForMainFrame == true && !loadCompleter.isCompleted) {
-            loadCompleter.complete(false);
+          if (request.isForMainFrame == true) {
+            final desc = error.description.toLowerCase();
+            final isDns = error.type == WebResourceErrorType.HOST_LOOKUP ||
+                desc.contains('name_not_resolved') ||
+                desc.contains('host_lookup') ||
+                desc.contains('err_name_not_resolved');
+            earlyHttpError = ResniffSourceUnavailable(
+              statusCode: null,
+              error: error.description,
+              isDnsFailure: isDns,
+            );
+            if (!loadCompleter.isCompleted) {
+              loadCompleter.complete(false);
+            }
           }
         },
       );
+
       await _headless!.run();
       _controller = _headless!.webViewController;
-      if (_controller == null) return null;
+      if (_controller == null) {
+        return const ResniffNoMediaFound(details: 'WebViewController failed to initialize.');
+      }
 
-      // Wait for the page to load.
-      final ok = await loadCompleter.future.timeout(_pageLoadTimeout);
-      if (_isDisposed || !ok) return null;
+      // Calculate remaining timeout for initial page load
+      final elapsedSoFar = DateTime.now().difference(startTime);
+      final pageLoadTimeout = timeout > elapsedSoFar
+          ? timeout - elapsedSoFar
+          : const Duration(seconds: 5);
 
-      // Give JS time to execute and the player to initialise.
+      final ok = await loadCompleter.future.timeout(
+        pageLoadTimeout,
+        onTimeout: () => false,
+      );
+
+      if (_isDisposed) {
+        return const ResniffNoMediaFound(details: 'Resniffer disposed during page load.');
+      }
+
+      if (!ok) {
+        if (earlyHttpError != null) {
+          return earlyHttpError!;
+        }
+        return ResniffPageLoadTimeout(
+          elapsed: DateTime.now().difference(startTime),
+          lastState: lastState,
+        );
+      }
+
+      // 1. Check WAF / Cloudflare challenge immediately after load
+      lastState = 'checking_security_challenge';
+      final initialChallenge = await _checkSecurityChallenge();
+      if (initialChallenge != null) {
+        return initialChallenge;
+      }
+
+      // 2. Give JS time to execute and initialize player
+      lastState = 'js_initialization';
       await Future<void>.delayed(_jsGracePeriod);
-      if (_isDisposed) return null;
+      if (_isDisposed) {
+        return const ResniffNoMediaFound(details: 'Resniffer disposed during JS init.');
+      }
 
-      // Poll DOM + performance entries until the player exposes a playlist
-      // (slow players fetch it seconds after load). Wake the player once if
-      // the first probes come back empty.
-      final found = await pollUntilFound(
+      // 3. Re-check challenge in case JS rendered it
+      final postJsChallenge = await _checkSecurityChallenge();
+      if (postJsChallenge != null) {
+        return postJsChallenge;
+      }
+
+      // 4. Multi-candidate DOM & performance polling loop
+      lastState = 'polling_media_candidates';
+      final remainingTimeout = timeout - DateTime.now().difference(startTime);
+      final pollDuration = remainingTimeout > const Duration(seconds: 2)
+          ? remainingTimeout
+          : const Duration(seconds: 5);
+
+      final discoveredCandidates = <String>{};
+
+      final pollResult = await pollUntilFound(
         () async {
-          final fromDom = await _queryDom();
-          if (fromDom != null) return [fromDom];
-          final fromPerf = await _queryPerformanceEntries();
-          if (fromPerf != null) return [fromPerf];
+          final candidates = await _queryCandidatesFromDom();
+          if (candidates.isNotEmpty) {
+            discoveredCandidates.addAll(candidates);
+            final matchResult = evaluateCandidates(
+              candidates: candidates,
+              originalMediaUrl: effectiveOriginalUrl,
+              sourcePageUrl: sourcePageUrl,
+            );
+            if (matchResult is ResniffSuccess || matchResult is ResniffUnchanged) {
+              return [matchResult.freshUrl ?? (matchResult as ResniffUnchanged).url];
+            }
+          }
           return null;
         },
+        timeout: pollDuration,
         interval: _resourcePollDelay,
         wakeUp: _isDisposed ? null : _wakePlayer,
       );
-      if (found != null && found.isNotEmpty) {
-        return _validateResult(found.first, mustMatchPathOf);
+
+      if (pollResult != null && pollResult.isNotEmpty) {
+        return evaluateCandidates(
+          candidates: discoveredCandidates.toList(),
+          originalMediaUrl: effectiveOriginalUrl,
+          sourcePageUrl: sourcePageUrl,
+        );
       }
 
-      return null;
-    } catch (_) {
-      return null;
+      // 5. Check if security challenge appeared late
+      final lateChallenge = await _checkSecurityChallenge();
+      if (lateChallenge != null) {
+        return lateChallenge;
+      }
+
+      // 6. Check if unplayed player is present requiring user interaction
+      final playerStatus = await _checkPlayerStatus();
+      if (playerStatus.hasPlayer && !playerStatus.isPlaying) {
+        return ResniffPlayerInteractionRequired(
+          details: playerStatus.details.isNotEmpty
+              ? playerStatus.details
+              : 'Player detected but playback has not started. Manual interaction required.',
+        );
+      }
+
+      // 7. Return candidates evaluation (NoMediaFound with candidates count)
+      return evaluateCandidates(
+        candidates: discoveredCandidates.toList(),
+        originalMediaUrl: effectiveOriginalUrl,
+        sourcePageUrl: sourcePageUrl,
+      );
+    } on TimeoutException {
+      return ResniffPageLoadTimeout(
+        elapsed: DateTime.now().difference(startTime),
+        lastState: lastState,
+      );
+    } catch (e) {
+      return ResniffSourceUnavailable(
+        error: 'Headless resniff failed: $e',
+      );
     } finally {
       await dispose();
     }
   }
 
-  /// Runs the same DOM query JS used by [_queryHlsFromPage] in
-  /// `sniffer_screen.dart`.
-  Future<String?> _queryDom() async {
-    final ctrl = _controller;
-    if (ctrl == null) return null;
+  /// Evaluates [candidates] against [originalMediaUrl] and returns the appropriate
+  /// [ResniffResult] variant.
+  @visibleForTesting
+  static ResniffResult evaluateCandidates({
+    required List<String> candidates,
+    required String? originalMediaUrl,
+    required String sourcePageUrl,
+  }) {
+    if (candidates.isEmpty) {
+      return const ResniffNoMediaFound(
+        candidatesInspected: 0,
+        details: 'No candidate media URLs found in DOM or network resources.',
+      );
+    }
+
+    final validCandidates = candidates
+        .where((c) => !StreamMatcher.isAdOrTrackingUrl(c))
+        .toList();
+
+    if (validCandidates.isEmpty) {
+      return ResniffNoMediaFound(
+        candidatesInspected: candidates.length,
+        details: 'All ${candidates.length} discovered candidates were identified as ads or tracking manifests.',
+      );
+    }
+
+    if (originalMediaUrl != null && originalMediaUrl.trim().isNotEmpty) {
+      final bestMatch = StreamMatcher.findBestMatch(
+        candidates: validCandidates,
+        originalMediaUrl: originalMediaUrl.trim(),
+        sourcePageUrl: sourcePageUrl,
+      );
+
+      if (bestMatch != null) {
+        if (bestMatch.url == originalMediaUrl.trim()) {
+          return ResniffUnchanged(bestMatch.url);
+        }
+        return ResniffSuccess(
+          bestMatch.url,
+          confidence: bestMatch.score,
+        );
+      }
+
+      return ResniffNoMediaFound(
+        candidatesInspected: candidates.length,
+        details: 'Discovered ${candidates.length} candidate(s), but none matched the original media stream with sufficient confidence.',
+      );
+    }
+
+    // No originalMediaUrl provided: return the first valid candidate
+    return ResniffSuccess(
+      validCandidates.first,
+      confidence: 1.0,
+    );
+  }
+
+  /// Parses challenge detection JSON result.
+  @visibleForTesting
+  static ResniffChallengeDetected? parseChallengeDetectionResult(String? jsonString) {
+    if (jsonString == null || jsonString.isEmpty || jsonString == '{}') return null;
     try {
-      final result = await ctrl.evaluateJavascript(source: _kHlsDomQueryJs);
-      if (result is String &&
-          result.isNotEmpty &&
-          result.contains('.m3u8') &&
-          !result.contains('ping.m3u8') &&
-          !result.contains('/ping')) {
-        return result;
+      final decoded = jsonDecode(jsonString);
+      if (decoded is Map<String, dynamic> && decoded['detected'] == true) {
+        final type = decoded['type'] as String? ?? 'cloudflare_turnstile';
+        final details = decoded['details'] as String?;
+        return ResniffChallengeDetected(
+          challengeType: type,
+          details: details,
+        );
       }
     } catch (_) {}
     return null;
   }
 
-  /// Polls `performance.getEntriesByType('resource')` for .m3u8 / .mpd
-  /// URLs — catches players that fetch playlists via XHR/fetch rather
-  /// than setting them as DOM element src.
-  Future<String?> _queryPerformanceEntries() async {
+  /// Parses player status JSON result.
+  @visibleForTesting
+  static ({bool hasPlayer, bool isPlaying, String details}) parsePlayerStatusResult(String? jsonString) {
+    if (jsonString == null || jsonString.isEmpty || jsonString == '{}') {
+      return (hasPlayer: false, isPlaying: false, details: '');
+    }
+    try {
+      final decoded = jsonDecode(jsonString);
+      if (decoded is Map<String, dynamic>) {
+        return (
+          hasPlayer: decoded['hasPlayer'] == true,
+          isPlaying: decoded['isPlaying'] == true,
+          details: decoded['details'] as String? ?? '',
+        );
+      }
+    } catch (_) {}
+    return (hasPlayer: false, isPlaying: false, details: '');
+  }
+
+  /// Parses media candidates JSON string array.
+  @visibleForTesting
+  static List<String> parseCandidatesJson(String? jsonString) {
+    if (jsonString == null || jsonString.isEmpty || jsonString == '[]') {
+      return const [];
+    }
+    try {
+      final decoded = jsonDecode(jsonString);
+      if (decoded is List) {
+        return decoded.whereType<String>().toList();
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// Checks for security / WAF challenges via DOM JavaScript evaluation.
+  Future<ResniffChallengeDetected?> _checkSecurityChallenge() async {
     final ctrl = _controller;
     if (ctrl == null) return null;
     try {
-      final result = await ctrl.evaluateJavascript(source: '''
-        (() => {
-          try {
-            const entries = performance.getEntriesByType('resource');
-            for (const e of entries) {
-              const u = e.name;
-              if ((u.indexOf('.m3u8') !== -1 || u.indexOf('.mpd') !== -1) &&
-                  u.indexOf('ping.m3u8') === -1 &&
-                  u.indexOf('/ping') === -1) {
-                return u;
-              }
-            }
-          } catch(e) {}
-          return '';
-        })()
-      ''');
-      if (result is String &&
-          result.isNotEmpty &&
-          result.contains('.m3u8')) {
-        return result;
+      final result = await ctrl.evaluateJavascript(source: _kChallengeDetectionJs);
+      if (result is String) {
+        return parseChallengeDetectionResult(result);
       }
     } catch (_) {}
     return null;
   }
 
-  /// Validates the result against [mustMatchPathOf] if provided.
-  String? _validateResult(String url, String? mustMatchPathOf) {
-    if (mustMatchPathOf == null) return url;
-    final fresh = Uri.tryParse(url);
-    final stale = Uri.tryParse(mustMatchPathOf);
-    if (fresh == null || stale == null) return null;
-    // Path must match; query may differ (that's the token refresh).
-    return fresh.path == stale.path ? url : null;
+  /// Queries all candidate media URLs from the DOM, players, and performance entries.
+  Future<List<String>> _queryCandidatesFromDom() async {
+    final ctrl = _controller;
+    if (ctrl == null) return const [];
+    try {
+      final result = await ctrl.evaluateJavascript(source: _kMultiMediaCandidatesJs);
+      if (result is String) {
+        return parseCandidatesJson(result);
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// Checks player status (video element state, overlay buttons) to see if manual
+  /// interaction is required.
+  Future<({bool hasPlayer, bool isPlaying, String details})> _checkPlayerStatus() async {
+    final ctrl = _controller;
+    if (ctrl == null) return (hasPlayer: false, isPlaying: false, details: '');
+    try {
+      final result = await ctrl.evaluateJavascript(source: _kPlayerStatusCheckJs);
+      if (result is String) {
+        return parsePlayerStatusResult(result);
+      }
+    } catch (_) {}
+    return (hasPlayer: false, isPlaying: false, details: '');
+  }
+
+  /// Wakes the video player by setting muted autoplay and triggering synthetic
+  /// pointer/touch/click events on play overlays.
+  Future<void> _wakePlayer() async {
+    final ctrl = _controller;
+    if (ctrl == null) return;
+    try {
+      await ctrl.evaluateJavascript(source: _kWakePlayerJs);
+    } catch (_) {}
   }
 
   /// Disposes the headless WebView. Idempotent. Called automatically
@@ -245,19 +822,17 @@ class HeadlessPageResniffer {
     _headless = null;
   }
 
-  /// Loads [sourcePageUrl] headlessly and returns **all** media URLs the
-  /// rendered DOM exposes — `<source src>`, `<video>/<audio> src`,
-  /// `og:video`/`twitter:player` meta, inline script strings, and
-  /// `performance.getEntriesByType('resource')` — for `.m3u8`, `.mpd` and
-  /// `.mp4`. Used by the listing crawler as the JS-rendered fallback when a
-  /// detail page's static HTML contains no direct media URL.
+  /// Loads [sourcePageUrl] headlessly with shared cookies/storage and returns
+  /// **all** media URLs the rendered DOM and network entries expose.
   ///
   /// Returns an empty list when nothing is found or the page cannot load.
   /// The instance is disposed automatically.
   Future<List<String>> resniffAll(String sourcePageUrl) async {
     if (!Platform.isAndroid && !Platform.isIOS) return const [];
     if (_isDisposed) return const [];
-    if (!sourcePageUrl.startsWith('http')) return const [];
+    if (!sourcePageUrl.startsWith('http://') && !sourcePageUrl.startsWith('https://')) {
+      return const [];
+    }
 
     final loadCompleter = Completer<bool>();
 
@@ -265,10 +840,12 @@ class HeadlessPageResniffer {
       _headless = HeadlessInAppWebView(
         initialUrlRequest: URLRequest(url: WebUri(sourcePageUrl)),
         initialSettings: InAppWebViewSettings(
-          incognito: true,
+          incognito: false,
           javaScriptEnabled: true,
           domStorageEnabled: true,
           databaseEnabled: true,
+          cacheEnabled: true,
+          cacheMode: CacheMode.LOAD_DEFAULT,
           mediaPlaybackRequiresUserGesture: false,
           useShouldOverrideUrlLoading: true,
           useOnLoadResource: false,
@@ -289,24 +866,23 @@ class HeadlessPageResniffer {
       _controller = _headless!.webViewController;
       if (_controller == null) return const [];
 
-      final ok = await loadCompleter.future.timeout(_pageLoadTimeout);
+      final ok = await loadCompleter.future.timeout(
+        _defaultTimeout,
+        onTimeout: () => false,
+      );
       if (_isDisposed || !ok) return const [];
 
       // Give JS time to execute and the player to initialise.
       await Future<void>.delayed(_jsGracePeriod);
       if (_isDisposed) return const [];
 
-      // Poll DOM + performance entries until media appears — players on
-      // many tubes fetch their playlist seconds after load, so a single
-      // fixed-delay probe misses them. Wake the player once if empty.
       final results = await pollUntilFound(
         () async {
-          final fromDom = await _queryAllMediaUrls();
-          if (fromDom != null && fromDom.isNotEmpty) return fromDom;
-          final fromPerf = await _queryAllPerformanceEntries();
-          if (fromPerf != null && fromPerf.isNotEmpty) return fromPerf;
+          final fromDom = await _queryCandidatesFromDom();
+          if (fromDom.isNotEmpty) return fromDom;
           return null;
         },
+        timeout: _defaultTimeout,
         interval: _resourcePollDelay,
         wakeUp: _isDisposed ? null : _wakePlayer,
       );
@@ -318,130 +894,5 @@ class HeadlessPageResniffer {
     } finally {
       await dispose();
     }
-  }
-
-  /// Tries to start the page's player programmatically — sites whose
-  /// players only fetch the playlist after a play gesture (click-to-play
-  /// players). Safe to call once per page: `play()` on the first <video>,
-  /// plus a click on the closest player wrapper as a fallback for custom
-  /// UI players. The WebView already runs with
-  /// `mediaPlaybackRequiresUserGesture: false`, so `play()` is allowed.
-  Future<void> _wakePlayer() async {
-    final ctrl = _controller;
-    if (ctrl == null) return;
-    try {
-      await ctrl.evaluateJavascript(source: r'''
-(() => {
-  try {
-    const v = document.querySelector('video');
-    if (v) {
-      try { v.play(); } catch (_) {}
-      const wrap = v.closest('[class*=player], [id*=player]');
-      if (wrap) { try { wrap.click(); } catch (_) {} }
-    }
-  } catch (_) {}
-  return true;
-})();
-''');
-    } catch (_) {}
-  }
-
-  /// Returns every `.m3u8` / `.mpd` / `.mp4` URL visible in the rendered
-  /// DOM: `<source src>`, `<video>/<audio>` src/currentSrc, meta
-  /// og:video/twitter:player, and inline `<script>` text. Null on failure.
-  ///
-  /// The script-string regex deliberately avoids `$` anchors (Dart string
-  /// interpolation) — a `(?!\\w)` lookahead guards against matching
-  /// `.m3u8x`-style false positives instead.
-  Future<List<String>?> _queryAllMediaUrls() async {
-    final ctrl = _controller;
-    if (ctrl == null) return null;
-    try {
-      final result = await ctrl.evaluateJavascript(source: r'''
-(() => {
-  const out = new Set();
-  function scan(root) {
-    if (!root || !root.querySelectorAll) return;
-    const sources = root.querySelectorAll('source[src]');
-    for (const s of sources) {
-      const src = s.src || s.getAttribute('src') || '';
-      if (src && /\.(m3u8|mpd|mp4)(?!\w)/i.test(src)) out.add(src);
-    }
-    const medias = root.querySelectorAll('video, audio');
-    for (const m of medias) {
-      const src = m.currentSrc || m.src || '';
-      if (src && /\.(m3u8|mpd|mp4)(?!\w)/i.test(src)) out.add(src);
-    }
-    const metas = root.querySelectorAll('meta[property="og:video"], meta[property="twitter:player:stream"], meta[itemprop="contentURL"]');
-    for (const mt of metas) {
-      const c = mt.content || '';
-      if (c && /\.(m3u8|mpd|mp4)(?!\w)/i.test(c)) out.add(c);
-    }
-    const scripts = root.querySelectorAll('script');
-    for (const sc of scripts) {
-      const text = sc.textContent || '';
-      const re = /(?:https?:)?\\?/\\?/[^"'\\s]+?\\.(m3u8|mpd|mp4)(?!\\w)/gi;
-      let m;
-      while ((m = re.exec(text)) !== null) {
-        let u = m[0].replace(/\\\//g, '/');
-        if (u.indexOf('//') === 0) u = 'https:' + u;
-        if (u.indexOf('ping.m3u8') === -1 && u.indexOf('/ping') === -1) out.add(u);
-      }
-    }
-  }
-  scan(document);
-  const iframes = document.querySelectorAll('iframe');
-  for (const f of iframes) {
-    try { const fr = f.contentDocument; if (fr) scan(fr); } catch (_) {}
-  }
-  return JSON.stringify(Array.from(out));
-})();
-''');
-      if (result is String && result.isNotEmpty && result != '[]') {
-        try {
-          final decoded = jsonDecode(result);
-          if (decoded is List) {
-            return decoded.whereType<String>().toList();
-          }
-        } catch (_) {}
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  /// Polls `performance.getEntriesByType('resource')` for all `.m3u8` /
-  /// `.mpd` / `.mp4` URLs — catches players that fetch playlists via
-  /// XHR/fetch rather than setting them as DOM element src.
-  Future<List<String>?> _queryAllPerformanceEntries() async {
-    final ctrl = _controller;
-    if (ctrl == null) return null;
-    try {
-      final result = await ctrl.evaluateJavascript(source: r'''
-        (() => {
-          try {
-            const out = new Set();
-            const entries = performance.getEntriesByType('resource');
-            for (const e of entries) {
-              const u = e.name;
-              if (/\.(m3u8|mpd|mp4)(?!\w)/i.test(u) &&
-                  u.indexOf('ping.m3u8') === -1 &&
-                  u.indexOf('/ping') === -1) {
-                out.add(u);
-              }
-            }
-            return JSON.stringify(Array.from(out));
-          } catch(e) { return '[]'; }
-        })()
-      ''');
-      if (result is String && result.isNotEmpty && result != '[]') {
-        try {
-          final decoded = jsonDecode(result);
-          if (decoded is List) {
-            return decoded.whereType<String>().toList();
-          }
-        } catch (_) {}
-      }
-    } catch (_) {}
-    return null;
   }
 }

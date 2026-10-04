@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:path/path.dart' as p;
 
 import '../../downloader/headless_webview_fetcher.dart';
+import '../../downloader/models.dart';
 import '../browser_controller.dart';
 import '../media_sniffer_engine.dart';
 import 'page_meta.dart';
@@ -57,6 +59,42 @@ class BrowserTab {
 
   PageMeta pageMeta = const PageMeta();
 
+  /// Target task ID when this tab is in an active resniff session.
+  String? resniffTaskId;
+
+  /// Display name of the task being resniffed.
+  String? resniffTaskName;
+
+  /// Original URL of the task being resniffed (used for StreamMatcher comparison).
+  String? resniffDonorUrl;
+
+  /// Source page URL of the task being resniffed.
+  String? resniffSourcePageUrl;
+
+  /// True when this tab is actively in resniff mode.
+  bool get isResniffing => resniffTaskId != null;
+
+  /// Primes this tab for an isolated resniff session by clearing old sniffer
+  /// media cache, resetting iframe records, and recording task parameters.
+  void primeResniffSession(DownloadTask task) {
+    resniffTaskId = task.id;
+    resniffTaskName = p.basename(task.savePath);
+    resniffDonorUrl = task.url;
+    resniffSourcePageUrl = task.sourcePageUrl ?? task.url;
+    snifferEngine.clearCache();
+    fetchedIframeSrcs.clear();
+    hlsPlaylistCache.clear();
+    authHeaderCache.clear();
+  }
+
+  /// Exits resniff mode and clears all task-binding references.
+  void exitResniffMode() {
+    resniffTaskId = null;
+    resniffTaskName = null;
+    resniffDonorUrl = null;
+    resniffSourcePageUrl = null;
+  }
+
   /// Per-tab cache of HLS playlist response bodies captured by
   /// browser_guard.js. Keyed by URL, value is the raw playlist text.
   /// Cleared on each page navigation.
@@ -104,6 +142,7 @@ class BrowserTab {
   });
 
   void dispose() {
+    exitResniffMode();
     videoPollTimer?.cancel();
     mediaSubscription?.cancel();
     addressController.dispose();

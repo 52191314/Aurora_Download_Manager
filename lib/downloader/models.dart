@@ -1,3 +1,6 @@
+import '../sniffer/resniff_result.dart';
+import '../sniffer/stream_matcher.dart';
+
 enum DownloadState {
   scheduled,
   idle,
@@ -50,6 +53,10 @@ enum DownloadFailure {
   /// TCP connection was reset mid-stream (ISP/CDN killed it).
   connectionReset,
 
+  /// TLS handshake failed because the server's certificate is invalid,
+  /// self-signed, or untrusted — a site misconfiguration, not a device issue.
+  certificateInvalid,
+
   // ── HTTP ──
   /// 401 — credentials or authentication required.
   httpUnauthorized,
@@ -75,6 +82,10 @@ enum DownloadFailure {
 
   /// Malformed, unsupported, or invalid URL (blob:, empty, etc.).
   urlInvalid,
+
+  /// Android deep link (intent:// / android-app://) — not a downloadable
+  /// file; must be handed to the Android system instead.
+  appLinkIntent,
 
   /// Server returned an HTML error page instead of the media file.
   contentMismatch,
@@ -147,6 +158,188 @@ enum DownloadFailure {
   // ── Other ──
   /// Unclassified or unexpected error.
   unknown,
+}
+
+/// Rich metadata, human-understandable guidance, and categorization for [DownloadFailure].
+extension DownloadFailureInfo on DownloadFailure {
+  /// Concise, human-understandable title for the failure.
+  String get userFacingTitle {
+    switch (this) {
+      case DownloadFailure.noInternet:
+        return 'No Internet Connection';
+      case DownloadFailure.dnsLookupFailed:
+        return 'DNS Lookup Failed';
+      case DownloadFailure.connectionRefused:
+        return 'Connection Refused';
+      case DownloadFailure.connectionTimeout:
+        return 'Connection Timed Out';
+      case DownloadFailure.responseTimeout:
+        return 'Server Response Timed Out';
+      case DownloadFailure.connectionReset:
+        return 'Connection Reset by Host';
+      case DownloadFailure.certificateInvalid:
+        return 'Site Certificate Invalid';
+      case DownloadFailure.httpUnauthorized:
+        return 'Authentication Required (401)';
+      case DownloadFailure.httpForbidden:
+        return 'Access Denied / Forbidden (403)';
+      case DownloadFailure.httpNotFound:
+        return 'File Not Found (404)';
+      case DownloadFailure.httpRateLimited:
+        return 'Rate Limited by Server (429)';
+      case DownloadFailure.httpServerError:
+        return 'Remote Server Error (5xx)';
+      case DownloadFailure.httpUnexpectedStatus:
+        return 'Unexpected Server Response';
+      case DownloadFailure.urlExpired:
+      case DownloadFailure.hlsTokenExpired:
+        return 'Stream Link Expired';
+      case DownloadFailure.urlInvalid:
+        return 'Invalid or Malformed URL';
+      case DownloadFailure.appLinkIntent:
+        return 'App Link - Open in Browser';
+      case DownloadFailure.contentMismatch:
+        return 'Unexpected Content (HTML Page)';
+      case DownloadFailure.hashMismatch:
+        return 'File Checksum Mismatch';
+      case DownloadFailure.emptyResponse:
+        return 'Empty Server Response (0 Bytes)';
+      case DownloadFailure.resourceChanged:
+        return 'Remote File Modified';
+      case DownloadFailure.hlsPlaylistEmpty:
+        return 'Empty Stream Playlist';
+      case DownloadFailure.hlsPlaylistFetchFailed:
+        return 'Stream Playlist Unavailable';
+      case DownloadFailure.hlsKeyFetchFailed:
+        return 'Stream Encryption Key Failed';
+      case DownloadFailure.hlsCircuitBreaker:
+        return 'Host Blocked Stream Requests';
+      case DownloadFailure.nativeEngineUnavailable:
+        return 'Torrent Engine Unavailable';
+      case DownloadFailure.diskFull:
+        return 'Device Storage Full';
+      case DownloadFailure.permissionDenied:
+        return 'Storage Permission Denied';
+      case DownloadFailure.fileSystemError:
+        return 'Storage File System Error';
+      case DownloadFailure.chunkIncomplete:
+        return 'Download Incomplete';
+      case DownloadFailure.chunkCorrupt:
+        return 'Corrupt Download Chunk';
+      case DownloadFailure.mergeInterrupted:
+      case DownloadFailure.mergeFailed:
+        return 'File Merge Failed';
+      case DownloadFailure.speedStall:
+        return 'Download Speed Stalled';
+      case DownloadFailure.partialDownload:
+        return 'Download Stalled (Partial File Saved)';
+      case DownloadFailure.torrentMetadataFailed:
+        return 'Torrent Metadata Failed';
+      case DownloadFailure.torrentEngineError:
+        return 'Torrent Engine Error';
+      case DownloadFailure.unknown:
+        return 'Download Failed';
+    }
+  }
+
+  /// Actionable suggestion or advice for the user.
+  String get actionableAdvice {
+    switch (this) {
+      case DownloadFailure.noInternet:
+      case DownloadFailure.dnsLookupFailed:
+      case DownloadFailure.connectionTimeout:
+      case DownloadFailure.responseTimeout:
+      case DownloadFailure.connectionReset:
+        return 'Check your network connection and retry.';
+      case DownloadFailure.urlExpired:
+      case DownloadFailure.httpForbidden:
+      case DownloadFailure.hlsCircuitBreaker:
+      case DownloadFailure.contentMismatch:
+        return 'The link expired or requires verification. Re-sniff to get a fresh link.';
+      case DownloadFailure.hlsTokenExpired:
+        return 'The link expired. Auto-repair is a Pro feature - tap Refresh (free) or re-sniff the page for a fresh link.';
+      case DownloadFailure.certificateInvalid:
+        return "This site's security certificate is invalid or self-signed. Nothing is wrong with your phone or network - try another source.";
+      case DownloadFailure.appLinkIntent:
+        return 'This is an Android app link (intent://), not a file. Open it in the browser so Android can handle it.';
+      case DownloadFailure.httpNotFound:
+        return 'The remote file was removed or moved on the server.';
+      case DownloadFailure.httpRateLimited:
+        return 'Server is busy. Wait a moment before retrying.';
+      case DownloadFailure.diskFull:
+        return 'Free up storage space on your device and retry.';
+      case DownloadFailure.permissionDenied:
+        return 'Grant storage permission in Android settings.';
+      case DownloadFailure.speedStall:
+      case DownloadFailure.partialDownload:
+      case DownloadFailure.chunkIncomplete:
+        return 'Retry download to resume remaining segments.';
+      case DownloadFailure.torrentMetadataFailed:
+        return 'No peers or metadata after waiting. The swarm may be empty, or DHT/UDP is blocked on this network.';
+      case DownloadFailure.torrentEngineError:
+        return 'The torrent engine could not download this file. Try another magnet, or check that UDP is not blocked.';
+      case DownloadFailure.nativeEngineUnavailable:
+        return 'This device could not load the torrent engine.';
+      default:
+        return 'Retry the download or report the link for assistance.';
+    }
+  }
+
+  /// Coarse class for analytics. Keep this stable — BigQuery groups on it.
+  /// `download_failed.failure_class` must not be a raw exception string.
+  String get analyticsClass {
+    if (isNetworkIssue) return 'network';
+    if (isStorageIssue) return 'storage';
+    if (isResniffable) return 'link';
+    switch (this) {
+      case DownloadFailure.httpUnauthorized:
+      case DownloadFailure.httpNotFound:
+      case DownloadFailure.httpRateLimited:
+      case DownloadFailure.httpServerError:
+      case DownloadFailure.httpUnexpectedStatus:
+        return 'http';
+      case DownloadFailure.chunkIncomplete:
+      case DownloadFailure.chunkCorrupt:
+      case DownloadFailure.mergeInterrupted:
+      case DownloadFailure.mergeFailed:
+      case DownloadFailure.speedStall:
+      case DownloadFailure.partialDownload:
+      case DownloadFailure.hashMismatch:
+      case DownloadFailure.resourceChanged:
+        return 'engine';
+      case DownloadFailure.nativeEngineUnavailable:
+      case DownloadFailure.torrentMetadataFailed:
+      case DownloadFailure.torrentEngineError:
+        return 'torrent';
+      default:
+        return 'other';
+    }
+  }
+
+  /// Whether the error can likely be resolved by re-sniffing the source page.
+  bool get isResniffable =>
+      this == DownloadFailure.urlExpired ||
+      this == DownloadFailure.hlsTokenExpired ||
+      this == DownloadFailure.httpForbidden ||
+      this == DownloadFailure.hlsCircuitBreaker ||
+      this == DownloadFailure.contentMismatch ||
+      this == DownloadFailure.emptyResponse;
+
+  /// Whether the error is related to device network connectivity.
+  bool get isNetworkIssue =>
+      this == DownloadFailure.noInternet ||
+      this == DownloadFailure.dnsLookupFailed ||
+      this == DownloadFailure.connectionRefused ||
+      this == DownloadFailure.connectionTimeout ||
+      this == DownloadFailure.responseTimeout ||
+      this == DownloadFailure.connectionReset ||
+      this == DownloadFailure.certificateInvalid;
+
+  /// Whether the error is related to device storage or permissions.
+  bool get isStorageIssue =>
+      this == DownloadFailure.diskFull ||
+      this == DownloadFailure.permissionDenied ||
+      this == DownloadFailure.fileSystemError;
 }
 
 enum DownloadPriority implements Comparable<DownloadPriority> {
@@ -249,6 +442,13 @@ class DownloadTask implements Comparable<DownloadTask> {
   /// download fails.  Enables programmatic error handling (e.g. different
   /// retry strategies per failure type) without string-matching.
   DownloadFailure? failureReason;
+
+  /// True when auto-retry will not continue. Analytics logs `download_failed`
+  /// only for these — retry ticks must not count as user failures.
+  bool failureIsTerminal;
+
+  /// Auto-retry index at the moment of this failure (0 = first try).
+  int analyticsRetryAttempts;
   String? publicUri;
   String? publicPathLabel;
   String? publishErrorMessage;
@@ -259,12 +459,60 @@ class DownloadTask implements Comparable<DownloadTask> {
 
   /// When set, the download will start at this time (Pro scheduled/night queue).
   DateTime? scheduledStartAt;
-  Future<String?> Function({bool forceReload})? onTokenExpired;
 
-  /// Optional callback that fetches a playlist/text URL through the WebView
-  /// (sniffer-grade `fetchPlaylistBodyViaJavaScript`), bypassing Cloudflare
-  /// WAF blocks that affect Dart's HTTP client.  Set when the task is created
-  /// from a browser tab context (sniffed media or in-app-pasted URL).
+  Future<ResniffResult> Function({bool forceReload})? _onTokenExpired;
+
+  /// Callback to refresh expired tokens/URLs. Returns a strongly-typed [ResniffResult].
+  Future<ResniffResult> Function({bool forceReload})? get onTokenExpired =>
+      _onTokenExpired;
+
+  set onTokenExpired(dynamic callback) {
+    if (callback == null) {
+      _onTokenExpired = null;
+    } else if (callback is Future<ResniffResult> Function({bool forceReload})) {
+      _onTokenExpired = callback;
+    } else if (callback is Future<String?> Function({bool forceReload})) {
+      _onTokenExpired = ({bool forceReload = false}) async {
+        final url = await callback(forceReload: forceReload);
+        if (url == null) {
+          return const ResniffNoMediaFound(
+            details: 'Legacy token refresh callback returned null',
+          );
+        }
+        if (url == this.url) {
+          return ResniffUnchanged(url);
+        }
+        return ResniffSuccess(url);
+      };
+    } else if (callback is Function) {
+      _onTokenExpired = ({bool forceReload = false}) async {
+        try {
+          final res =
+              await Function.apply(callback, [], {#forceReload: forceReload});
+          if (res is ResniffResult) return res;
+          if (res is String) {
+            if (res == url) return ResniffUnchanged(res);
+            return ResniffSuccess(res);
+          }
+          return const ResniffNoMediaFound(
+            details: 'Callback returned null or unrecognized result',
+          );
+        } catch (e) {
+          return ResniffSourceUnavailable(
+            error: 'Callback invocation failed: $e',
+          );
+        }
+      };
+    }
+  }
+
+  /// Structured diagnostic outcome from the most recent headless or in-tab resniff attempt.
+  ResniffResult? lastResniffResult;
+
+  /// Optional callback that routes an HTTP request through the browser
+  /// tab's JavaScript fetch() to bypass Cloudflare/Incapsula bot protections.
+  /// Set by the sniffer when adding a task from an active tab.
+  /// Signature: `Future<String?> Function(String url, {Map<String, String>? headers})`
   Future<String?> Function(String url, {Map<String, String>? headers})?
   fetchViaWebView;
 
@@ -276,7 +524,7 @@ class DownloadTask implements Comparable<DownloadTask> {
 
   /// Optional callback that fetches binary data (e.g. HLS .ts segments)
   /// through the WebView's JavaScript XHR with arraybuffer response type.
-  /// Returns the raw bytes as List<int>, or null on failure.
+  /// Returns the raw bytes as `List<int>`, or null on failure.
   Future<List<int>?> Function(String url)? fetchBinaryViaWebView;
 
   /// Optional callback that returns cookies from the WebView's cookie jar
@@ -313,11 +561,14 @@ class DownloadTask implements Comparable<DownloadTask> {
     this.errorMessage,
     this.statusMessage,
     this.failureReason,
+    this.failureIsTerminal = false,
+    this.analyticsRetryAttempts = 0,
     this.publicUri,
     this.publicPathLabel,
     this.publishErrorMessage,
     this.etag,
     this.lastModified,
+    this.lastResniffResult,
     this.chunks = const [],
     DateTime? createdAt,
     this.scheduledStartAt,
@@ -427,6 +678,7 @@ class DownloadTask implements Comparable<DownloadTask> {
     'publishErrorMessage': publishErrorMessage,
     'etag': etag,
     'lastModified': lastModified,
+    if (lastResniffResult != null) 'lastResniffResult': lastResniffResult!.toJson(),
     'chunks': chunks.map((c) => c.toJson()).toList(),
     'createdAt': createdAt.toIso8601String(),
     if (scheduledStartAt != null)
@@ -489,6 +741,19 @@ class DownloadTask implements Comparable<DownloadTask> {
       state = DownloadState.paused;
     }
 
+    ResniffResult? lastResniffResult;
+    if (json['lastResniffResult'] != null) {
+      try {
+        final lrJson = json['lastResniffResult'];
+        if (lrJson is Map<String, dynamic>) {
+          lastResniffResult = ResniffResult.fromJson(lrJson);
+        } else if (lrJson is Map) {
+          lastResniffResult =
+              ResniffResult.fromJson(Map<String, dynamic>.from(lrJson));
+        }
+      } catch (_) {}
+    }
+
     return DownloadTask(
       id: id,
       url: url,
@@ -521,6 +786,7 @@ class DownloadTask implements Comparable<DownloadTask> {
       publishErrorMessage: json['publishErrorMessage'] as String?,
       etag: json['etag'] as String?,
       lastModified: json['lastModified'] as String?,
+      lastResniffResult: lastResniffResult,
       chunks: chunks,
       createdAt: json['createdAt'] != null
           ? (DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now())
@@ -584,4 +850,29 @@ abstract interface class BaseDownloader {
   Future<void> start();
   Future<void> pause({DownloadState targetState});
   Future<void> dispose();
+}
+
+/// Represents an active in-tab or headless resniff session bound to an existing task.
+class ResniffSession {
+  final String taskId;
+  final String taskName;
+  final String originalUrl;
+  final String sourcePageUrl;
+  final DateTime createdAt;
+
+  ResniffSession({
+    required this.taskId,
+    required this.taskName,
+    required this.originalUrl,
+    required this.sourcePageUrl,
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  bool matchesCandidate(String mediaUrl) {
+    return StreamMatcher.findBestMatch(
+      candidates: [mediaUrl],
+      originalMediaUrl: originalUrl,
+      sourcePageUrl: sourcePageUrl,
+    ) != null;
+  }
 }

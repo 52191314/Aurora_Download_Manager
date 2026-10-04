@@ -25,6 +25,9 @@ class CaptureMediaRow extends StatelessWidget {
     required this.onInfo,
     this.displayMode = SniffedMediaDisplayMode.both,
     this.pagePoster,
+    this.isResniffMode = false,
+    this.resniffMatchScore = 0.0,
+    this.onReplaceTaskStream,
   });
 
   final int index;
@@ -34,6 +37,9 @@ class CaptureMediaRow extends StatelessWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onPreview;
   final VoidCallback onInfo;
+  final bool isResniffMode;
+  final double resniffMatchScore;
+  final VoidCallback? onReplaceTaskStream;
 
   /// Page artwork to fall back on when this row's media has no poster of its
   /// own. Null when the sheet judged the page's `og:image` unrepresentative.
@@ -195,6 +201,78 @@ class CaptureMediaRow extends StatelessWidget {
                                 color: ac.textTertiary,
                                 fontSize: 11,
                               ),
+                            ),
+                          ],
+                          if (isResniffMode && onReplaceTaskStream != null) ...[
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (resniffMatchScore >= 0.4)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: ac.accentAmber.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: ac.accentAmber.withValues(
+                                          alpha: 0.4,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.auto_awesome,
+                                          size: 10,
+                                          color: ac.accentAmber,
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          'Donor Match ${(resniffMatchScore * 100).toInt()}%',
+                                          style: TextStyle(
+                                            color: ac.accentAmber,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ElevatedButton.icon(
+                                  onPressed: onReplaceTaskStream,
+                                  icon: const Icon(
+                                    Icons.sync_rounded,
+                                    size: 14,
+                                  ),
+                                  label: const Text(
+                                    'Replace Task Stream',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: ac.accentFrost,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ],

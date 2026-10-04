@@ -17,6 +17,7 @@ import '../platform/ts_remux_service.dart';
 import 'headless_webview_fetcher.dart';
 import 'download_error_classifier.dart';
 import 'hls_playlist_fetch_limiter.dart';
+import '../sniffer/resniff_result.dart';
 
 void _logError(String context, Object error, [StackTrace? stack]) {
   final message = '[HlsDownloader] $context: $error';
@@ -219,14 +220,33 @@ class HlsDownloader implements BaseDownloader {
             task.errorMessage =
                 'Server responded with ${code ?? "an error"}. Aurora is refreshing the link.';
             _taskUpdateController.add(task);
-            final newUrl = await task.onTokenExpired!(forceReload: false);
-            if (newUrl != null && newUrl != _currentPlaylistUrl) {
+            final res = await task.onTokenExpired!(forceReload: false);
+            task.lastResniffResult = res;
+            if (res is ResniffSuccess) {
+              final newUrl = res.url;
               _currentPlaylistUrl = newUrl;
+              task.url = newUrl;
+              if (res.headers != null && res.headers!.isNotEmpty) {
+                task.headers = {
+                  ...?task.headers,
+                  ...res.headers!,
+                };
+              }
               playlist = await _loadMediaPlaylist(Uri.parse(newUrl));
-            } else {
+            } else if (res is ResniffUnchanged) {
               rethrow;
+            } else {
+              task.errorMessage = res.userFacingMessage;
+              task.failureReason = DownloadFailure.hlsTokenExpired;
+              throw StateError(
+                'HLS download failed: ${res.userFacingMessage}',
+              );
             }
           } catch (refreshError, refreshStack) {
+            if (task.lastResniffResult != null &&
+                !task.lastResniffResult!.isSuccess) {
+              rethrow;
+            }
             _logError(
               'Refresh-after-failure also failed',
               refreshError,
@@ -259,13 +279,26 @@ class HlsDownloader implements BaseDownloader {
           task.errorMessage =
               'Couldn\'t fetch encryption key (${code ?? "error"}). Aurora is refreshing the link.';
           _taskUpdateController.add(task);
-          final newUrl = await task.onTokenExpired!(forceReload: false);
-          if (newUrl != null && newUrl != _currentPlaylistUrl) {
+          final res = await task.onTokenExpired!(forceReload: false);
+          task.lastResniffResult = res;
+          if (res is ResniffSuccess) {
+            final newUrl = res.url;
             _currentPlaylistUrl = newUrl;
+            task.url = newUrl;
+            if (res.headers != null && res.headers!.isNotEmpty) {
+              task.headers = {
+                ...?task.headers,
+                ...res.headers!,
+              };
+            }
             playlist = await _loadMediaPlaylist(Uri.parse(newUrl));
             _playlist = playlist;
             _encryptionKeyBytes = await _loadEncryptionKey(playlist);
           } else {
+            if (res is! ResniffUnchanged) {
+              task.errorMessage = res.userFacingMessage;
+              task.failureReason = DownloadFailure.hlsTokenExpired;
+            }
             rethrow;
           }
         } else {
@@ -356,10 +389,26 @@ class HlsDownloader implements BaseDownloader {
               ? 'Access token expired. Aurora is fetching a fresh one.'
               : 'Token still expired. Aurora is trying again with a fresh reload.';
           _taskUpdateController.add(task);
-          final newUrl = await task.onTokenExpired!(forceReload: attempt > 0);
-          if (newUrl == null || newUrl == _currentPlaylistUrl) break;
+          final res = await task.onTokenExpired!(forceReload: attempt > 0);
+          task.lastResniffResult = res;
+          if (res is! ResniffSuccess) {
+            if (res is! ResniffUnchanged) {
+              task.errorMessage = res.userFacingMessage;
+              task.failureReason = DownloadFailure.hlsTokenExpired;
+            }
+            break;
+          }
+          final newUrl = res.url;
+          if (newUrl == _currentPlaylistUrl) break;
           try {
             _currentPlaylistUrl = newUrl;
+            task.url = newUrl;
+            if (res.headers != null && res.headers!.isNotEmpty) {
+              task.headers = {
+                ...?task.headers,
+                ...res.headers!,
+              };
+            }
             _playlist = await _loadMediaPlaylist(Uri.parse(newUrl));
             _encryptionKeyBytes = await _loadEncryptionKey(_playlist!);
           } catch (e, s) {
@@ -373,8 +422,13 @@ class HlsDownloader implements BaseDownloader {
         }
         if (_needsRefresh && _staleSegmentIndexes.isNotEmpty) {
           task.failureReason = DownloadFailure.hlsTokenExpired;
-          task.errorMessage =
-              'Token refresh didn\'t work. The stream URL may have expired. Re-sniff from the page.';
+          if (task.lastResniffResult != null &&
+              !task.lastResniffResult!.isSuccess) {
+            task.errorMessage = task.lastResniffResult!.userFacingMessage;
+          } else {
+            task.errorMessage =
+                'Token refresh didn\'t work. The stream URL may have expired. Re-sniff from the page.';
+          }
           _taskUpdateController.add(task);
         }
       }
@@ -426,8 +480,14 @@ class HlsDownloader implements BaseDownloader {
       if (_isPaused) return;
       task.state = DownloadState.failed;
       final classified = DownloadErrorClassifier.classifyAndMessage(error);
-      task.failureReason = classified.reason;
-      task.errorMessage = classified.message;
+      if (task.lastResniffResult != null &&
+          !task.lastResniffResult!.isSuccess) {
+        task.failureReason = DownloadFailure.hlsTokenExpired;
+        task.errorMessage = task.lastResniffResult!.userFacingMessage;
+      } else {
+        task.failureReason = task.failureReason ?? classified.reason;
+        task.errorMessage = classified.message;
+      }
       _taskUpdateController.add(task);
       rethrow;
     } finally {
@@ -823,10 +883,18 @@ class HlsDownloader implements BaseDownloader {
       task.statusMessage = 'Refreshing link from the page.';
       task.errorMessage = null;
       _taskUpdateController.add(task);
-      final newUrl = await task.onTokenExpired!(forceReload: forceReload);
-      if (newUrl != null && newUrl != task.url) {
+      final res = await task.onTokenExpired!(forceReload: forceReload);
+      task.lastResniffResult = res;
+      if (res is ResniffSuccess) {
+        final newUrl = res.url;
         task.url = newUrl;
         _currentPlaylistUrl = newUrl;
+        if (res.headers != null && res.headers!.isNotEmpty) {
+          task.headers = {
+            ...?task.headers,
+            ...res.headers!,
+          };
+        }
         // URL changed — full restart is needed since old segments are stale.
         _isRetry = false;
         // Wipe stale segments from the old URL so the resume-detection

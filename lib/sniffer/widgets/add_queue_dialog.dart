@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,8 +8,11 @@ import '../../downloader/downloader.dart';
 import '../../downloader/file_classifier.dart';
 import '../../downloader/filename_service.dart';
 import '../../l10n/app_localizations.dart';
+import '../../premium/pro_entitlement.dart';
+import '../../premium/pro_upsell_sheet.dart';
 import '../../theme/aurora_palette.dart';
 import '../../ui/notifications/aurora_snackbar.dart';
+import '../../ui/widgets/torrent_precheck_dialog.dart';
 import '../filename_utils.dart';
 import '../hls_playlist_cache_lookup.dart';
 import '../models/browser_tab.dart';
@@ -266,6 +270,24 @@ class AddQueueDialogContentState extends State<AddQueueDialogContent> {
 
     try {
       final mediaUrl = selectedMedia.url;
+      final isTorrent = mediaUrl.startsWith('magnet:') ||
+          mediaUrl.toLowerCase().endsWith('.torrent') ||
+          selectedMedia.contentType == 'application/x-bittorrent';
+      if (isTorrent) {
+        final engineErr =
+            await TorrentDownloader.checkNativeEngineAvailability();
+        if (engineErr != null) {
+          if (mounted) {
+            setState(() => isSubmitting = false);
+            await showTorrentEngineUnavailableDialog(
+              context,
+              reason: engineErr,
+            );
+          }
+          return;
+        }
+      }
+
       if (RestrictedMediaPolicy.isBlocked(
         mediaUrl: mediaUrl,
         sourcePageUrl:

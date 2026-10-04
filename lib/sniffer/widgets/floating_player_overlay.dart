@@ -11,10 +11,14 @@ Widget buildFloatingPlayerOverlay({
   required SniffedMedia? media,
   required Rect? videoFloatRect,
   required VoidCallback onTap,
+  VoidCallback? onDownload,
+  VoidCallback? onPlay,
   required VoidCallback onDismiss,
 }) {
   final button = FloatingVideoButton(
     onTap: onTap,
+    onDownload: onDownload,
+    onPlay: onPlay,
     onDismiss: onDismiss,
     subtitle: floatingPlayerSubtitle(media),
   );
