@@ -88,7 +88,7 @@ void main() {
   });
 
   group('RestrictedMediaPolicy channel gating', () {
-    test('default github channel does not enforce', () {
+    test('non-play channel does not enforce compliance by default', () {
       expect(BuildChannel.isPlay, isFalse);
       expect(RestrictedMediaPolicy.enforcementEnabled, isFalse);
       expect(

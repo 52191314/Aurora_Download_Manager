@@ -37,13 +37,9 @@ void main() {
     late List<OverflowMenuEntry> mockSettingsEntries;
     late List<OverflowMenuEntry> mockToolEntries;
     late List<String> tappedLabels;
-    late List<String> reorderedTools;
-    late List<String> reorderedSettings;
 
     setUp(() {
       tappedLabels = [];
-      reorderedTools = [];
-      reorderedSettings = [];
       OverflowMenuSegmentStore.last = OverflowMenuSegment.settings;
 
       mockSettingsEntries = [
@@ -177,7 +173,7 @@ void main() {
         expect(find.text('Incognito: Off'), findsOneWidget);
         expect(find.text('Open in Custom Tab'), findsOneWidget);
 
-        final listFinder = find.byType(ReorderableListView);
+        final listFinder = find.byType(ListView);
         expect(listFinder, findsOneWidget);
 
         final allToolLabels = [
@@ -238,7 +234,7 @@ void main() {
           await tester.tap(find.text('Open Tools'));
           await tester.pumpAndSettle();
 
-          final listFinder = find.byType(ReorderableListView);
+          final listFinder = find.byType(ListView);
           await tester.dragUntilVisible(
             find.text(targetEntry.label),
             listFinder,
@@ -347,7 +343,7 @@ void main() {
     // Tier 3: Cross-Feature Combinations
     // ==========================================
     group('Tier 3: Cross-Feature Combinations', () {
-      testWidgets('switching between Settings & Tools segments updates view and persists segment state', (tester) async {
+      testWidgets('single list shows tools and settings together', (tester) async {
         setLargeSurfaceSize(tester);
 
         await tester.pumpWidget(
@@ -369,119 +365,18 @@ void main() {
           ),
         );
 
-        // 1. Open popup (defaults to Settings segment)
-        await tester.tap(find.text('Open Popup'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('Defaults'), findsOneWidget);
-        expect(find.text('Stealth Mode: Off'), findsNothing);
-
-        // 2. Switch to Tools segment
-        await tester.tap(find.text('Tools'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('Stealth Mode: Off'), findsOneWidget);
-        expect(find.text('Defaults'), findsNothing);
-        expect(OverflowMenuSegmentStore.last, equals(OverflowMenuSegment.tools));
-
-        // 3. Dismiss popup by tapping outside barrier
-        await tester.tapAt(const Offset(10, 10));
-        await tester.pumpAndSettle();
-
-        // 4. Re-open popup without explicit initialSegment -> should restore Tools segment
         await tester.tap(find.text('Open Popup'));
         await tester.pumpAndSettle();
 
         expect(find.text('Stealth Mode: Off'), findsOneWidget);
-
-        // 5. Switch back to Settings segment
-        await tester.tap(find.text('Settings'));
-        await tester.pumpAndSettle();
-
+        final listFinder = find.byType(ListView);
+        await tester.dragUntilVisible(
+          find.text('Defaults'),
+          listFinder,
+          const Offset(0, -80),
+        );
         expect(find.text('Defaults'), findsOneWidget);
-        expect(OverflowMenuSegmentStore.last, equals(OverflowMenuSegment.settings));
-      });
-
-      testWidgets('reordering tool entries notifies onReorderTools callback and updates order', (tester) async {
-        setLargeSurfaceSize(tester);
-
-        await tester.pumpWidget(
-          buildTestableWidget(
-            Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () {
-                  showBrowserOverflowPopup(
-                    context,
-                    pageTitle: 'Reorder Test',
-                    pageUrl: 'https://example.com',
-                    settingsEntries: mockSettingsEntries,
-                    toolEntries: mockToolEntries,
-                    initialSegment: OverflowMenuSegment.tools,
-                    onReorderTools: (newOrder) => reorderedTools = newOrder,
-                  );
-                },
-                child: const Text('Open Tools Reorder'),
-              ),
-            ),
-          ),
-        );
-
-        await tester.tap(find.text('Open Tools Reorder'));
-        await tester.pumpAndSettle();
-
-        final itemFinder = find.byKey(const ValueKey('tools_Stealth Mode: Off'));
-        expect(itemFinder, findsOneWidget);
-
-        final itemCenter = tester.getCenter(itemFinder);
-        final TestGesture gesture = await tester.startGesture(itemCenter);
-        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 200));
-        await gesture.moveBy(const Offset(0, 150));
-        await tester.pumpAndSettle();
-        await gesture.up();
-        await tester.pumpAndSettle();
-
-        expect(reorderedTools, isNotEmpty);
-      });
-
-      testWidgets('reordering settings entries notifies onReorderSettings callback', (tester) async {
-        setLargeSurfaceSize(tester);
-
-        await tester.pumpWidget(
-          buildTestableWidget(
-            Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () {
-                  showBrowserOverflowPopup(
-                    context,
-                    pageTitle: 'Settings Reorder Test',
-                    pageUrl: 'https://example.com',
-                    settingsEntries: mockSettingsEntries,
-                    toolEntries: mockToolEntries,
-                    initialSegment: OverflowMenuSegment.settings,
-                    onReorderSettings: (newOrder) => reorderedSettings = newOrder,
-                  );
-                },
-                child: const Text('Open Settings Reorder'),
-              ),
-            ),
-          ),
-        );
-
-        await tester.tap(find.text('Open Settings Reorder'));
-        await tester.pumpAndSettle();
-
-        final itemFinder = find.byKey(const ValueKey('settings_Defaults'));
-        expect(itemFinder, findsOneWidget);
-
-        final itemCenter = tester.getCenter(itemFinder);
-        final TestGesture gesture = await tester.startGesture(itemCenter);
-        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 200));
-        await gesture.moveBy(const Offset(0, 150));
-        await tester.pumpAndSettle();
-        await gesture.up();
-        await tester.pumpAndSettle();
-
-        expect(reorderedSettings, isNotEmpty);
+        expect(find.text('example.com'), findsOneWidget);
       });
     });
 
@@ -517,58 +412,13 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Lifecycle Test Page'), findsOneWidget);
 
-        // Step 2: Switch to Tools segment
-        await tester.tap(find.text('Tools'));
-        await tester.pumpAndSettle();
-
-        // Step 3: Tap a tool action (e.g. 'Saved pages')
+        // Step 2: Tap a tool action (e.g. 'Saved pages')
         await tester.tap(find.text('Saved pages'));
         await tester.pumpAndSettle();
 
         // Step 4: Verify popup auto-dismisses and callback executes
         expect(find.text('Lifecycle Test Page'), findsNothing);
         expect(tappedLabels, contains('Saved pages'));
-      });
-
-      testWidgets('dragging reorder handles reorders items interactively via gesture', (tester) async {
-        setLargeSurfaceSize(tester);
-
-        await tester.pumpWidget(
-          buildTestableWidget(
-            Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () {
-                  showBrowserOverflowPopup(
-                    context,
-                    pageTitle: 'Drag Handle Test',
-                    pageUrl: 'https://example.com',
-                    settingsEntries: mockSettingsEntries,
-                    toolEntries: mockToolEntries,
-                    initialSegment: OverflowMenuSegment.tools,
-                    onReorderTools: (newOrder) => reorderedTools = newOrder,
-                  );
-                },
-                child: const Text('Open Drag Test'),
-              ),
-            ),
-          ),
-        );
-
-        await tester.tap(find.text('Open Drag Test'));
-        await tester.pumpAndSettle();
-
-        final itemFinder = find.byKey(const ValueKey('tools_Stealth Mode: Off'));
-        expect(itemFinder, findsOneWidget);
-
-        final itemCenter = tester.getCenter(itemFinder);
-        final TestGesture gesture = await tester.startGesture(itemCenter);
-        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 200));
-        await gesture.moveBy(const Offset(0, 150));
-        await tester.pumpAndSettle();
-        await gesture.up();
-        await tester.pumpAndSettle();
-
-        expect(reorderedTools, isNotEmpty);
       });
 
       testWidgets('tapping multiple tools sequentially across multiple menu launches', (tester) async {
@@ -593,26 +443,25 @@ void main() {
           ),
         );
 
-        // First launch: Open menu -> switch to Tools -> tap 'Stealth Mode: Off'
         await tester.tap(find.text('Open Menu Multi'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Tools'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Stealth Mode: Off'));
         await tester.pumpAndSettle();
 
-        // Second launch: Open menu (persists on Tools segment) -> tap 'Incognito: Off'
         await tester.tap(find.text('Open Menu Multi'));
         await tester.pumpAndSettle();
         expect(find.text('Incognito: Off'), findsOneWidget);
         await tester.tap(find.text('Incognito: Off'));
         await tester.pumpAndSettle();
 
-        // Third launch: Open menu -> switch to Settings -> tap 'Defaults'
         await tester.tap(find.text('Open Menu Multi'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Settings'));
-        await tester.pumpAndSettle();
+        final listFinder = find.byType(ListView);
+        await tester.dragUntilVisible(
+          find.text('Defaults'),
+          listFinder,
+          const Offset(0, -80),
+        );
         await tester.tap(find.text('Defaults'));
         await tester.pumpAndSettle();
 

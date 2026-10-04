@@ -4,13 +4,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'l10n/app_localizations.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'dev/screenshot_fixtures.dart';
 import 'downloader/download_rules.dart';
 import 'downloader/downloader.dart';
-import 'l10n/app_localizations.dart';
 import 'notifications/download_notification_service.dart';
 import 'platform/download_foreground_service.dart';
 import 'platform/public_downloads_service.dart';
@@ -20,12 +20,12 @@ import 'sniffer/browser_controller.dart';
 import 'sniffer/browser_open_request.dart';
 import 'sniffer/sniffer_screen.dart';
 import 'sniffer/sniffer_url_utils.dart';
-import 'ui/donate_sheet.dart';
 import 'theme/aurora_glass_background.dart';
 import 'theme/aurora_palette.dart';
 import 'theme/aurora_theme.dart';
 import 'theme/aurora_tokens.dart';
 import 'ui/pages/queue_page.dart';
+import 'ui/donate_sheet.dart';
 import 'ui/widgets/aurora_dock.dart';
 import 'ui/notifications/aurora_snackbar.dart';
 import 'ui/pages/settings_page.dart';
@@ -42,6 +42,7 @@ import 'premium/phase2_caps.dart';
 import 'premium/accent_pack.dart';
 import 'premium/vault_service.dart';
 import 'sniffer/token_refresh_service.dart';
+import 'sniffer/resniff_result.dart';
 import 'sniffer/sheets/duplicate_download_dialog.dart';
 
 import 'compliance/restricted_media_policy.dart';
@@ -50,6 +51,7 @@ import 'premium/watcher/watcher_service.dart';
 import 'premium/automation/automation_api_service.dart';
 import 'settings/onboarding_experiment.dart';
 import 'ui/widgets/onboarding_spotlight.dart';
+import 'ui/widgets/torrent_precheck_dialog.dart';
 
 /// Browser User-Agent used for manually pasted download URLs. Mirrors the
 /// same constant in sniffer_screen.dart so manually-pasted HLS requests look
@@ -78,9 +80,7 @@ enum BatteryOptChoice { openSettings, later, neverAskAgain }
 void main() {
   // Global error handlers: catch any uncaught Dart/async errors so a single
   // plugin failure does not silently kill the app (which Android reports as
-  // a crash to the user).  On the S23 Ultra this is especially important
-  // because Samsung's One UI aggressively kills apps that hit an uncaught
-  // error during init.
+  // a crash to the user).
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
@@ -97,6 +97,10 @@ void main() {
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
         debugPrint('[FlutterError] ${details.exceptionAsString()}');
+      };
+      PlatformDispatcher.instance.onError = (error, stack) {
+        debugPrint('[PlatformDispatcherError] $error\n$stack');
+        return true;
       };
       // In release mode, ErrorWidget shows a blank grey box by default
       // (invisible on a white/dark background). Override it so any build()
@@ -260,12 +264,6 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
   /// Guards concurrent soft dialogs if launch + first download race.
   static bool _batteryOptDialogShowing = false;
 
-  /// One-shot per process: the periodic donation prompt is scheduled at most
-  /// once, and only after the onboarding tour / permission prompts are done.
-  static bool _donationPromptScheduled = false;
-
-  final DonationPromptStore _donationStore = DonationPromptStore();
-
   final GlobalKey _urlInputKey = GlobalKey();
   final GlobalKey _browserTabKey = GlobalKey();
   final GlobalKey _browserMenuKey = GlobalKey();
@@ -357,19 +355,19 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
   Future<void> _showFirstLaunchLanguageSheetIfNeeded() async {
     if (!mounted) return;
     String selectedCode = _settings.appLanguageCode;
-    await showDialog<void>(
+    final confirmedCode = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        final ac = context.ac;
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
+            final ac = dialogCtx.ac;
             final l = AppLocalizations.of(dialogCtx);
             return AlertDialog(
-              backgroundColor: const Color(0xFF0F172A),
+              backgroundColor: ac.surfaceCard,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: ac.accentFrost.withValues(alpha: 0.3)),
+                side: BorderSide(color: ac.glassBorder),
               ),
               title: Row(
                 children: [
@@ -378,8 +376,8 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
                   Expanded(
                     child: Text(
                       l?.onboardingWelcomeTitle ?? 'App Language',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: ac.textPrimary,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -397,8 +395,8 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
                       Text(
                         l?.onboardingWelcomeDesc ??
                             'Select your display language for Aurora Downloader interface:',
-                        style: const TextStyle(
-                          color: Color(0xFF94A3B8),
+                        style: TextStyle(
+                          color: ac.textSecondary,
                           fontSize: 13,
                         ),
                       ),
@@ -410,22 +408,19 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
                           child: Material(
                             color: isSelected
                                 ? ac.accentFrost.withValues(alpha: 0.15)
-                                : const Color(0xFF1E293B),
+                                : ac.surfaceElevated,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                               side: BorderSide(
                                 color: isSelected
                                     ? ac.accentFrost
-                                    : Colors.transparent,
+                                    : ac.borderHairline,
                               ),
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: InkWell(
                               onTap: () {
                                 setDialogState(() => selectedCode = lang.code);
-                                _updateSettings(
-                                  _settings.copyWith(appLanguageCode: lang.code),
-                                );
                               },
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -440,7 +435,7 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
                                           : Icons.radio_button_off,
                                       color: isSelected
                                           ? ac.accentFrost
-                                          : const Color(0xFF64748B),
+                                          : ac.textTertiary,
                                       size: 20,
                                     ),
                                     const SizedBox(width: 12),
@@ -449,8 +444,8 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
                                         lang.name,
                                         style: TextStyle(
                                           color: isSelected
-                                              ? Colors.white
-                                              : const Color(0xFFCBD5E1),
+                                              ? ac.textPrimary
+                                              : ac.textSecondary,
                                           fontWeight: isSelected
                                               ? FontWeight.bold
                                               : FontWeight.normal,
@@ -473,12 +468,15 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: ac.accentFrost,
-                    foregroundColor: Colors.black,
+                    foregroundColor:
+                        Theme.of(dialogCtx).brightness == Brightness.dark
+                            ? Colors.black
+                            : Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  onPressed: () => Navigator.of(dialogCtx).pop(selectedCode),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -496,6 +494,12 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
         );
       },
     );
+
+    if (confirmedCode != null && mounted) {
+      _updateSettings(
+        _settings.copyWith(appLanguageCode: confirmedCode),
+      );
+    }
   }
 
   /// Whether soft/system permission dialogs may show right now.
@@ -513,41 +517,12 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     await _promptBatteryOptIfNeeded();
   }
 
-  /// One-shot, non-blocking donation prompt: 7-day install grace, 7-day
-  /// cooldown, permanent opt-out. Runs a few seconds after launch so it never
-  /// stacks with the onboarding tour or the permission dialogs, and opens the
-  /// Patreon link in the built-in browser when tapped.
-  void _scheduleDonationPrompt() {
-    if (_donationPromptScheduled) return;
-    _donationPromptScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Future.delayed(const Duration(seconds: 6));
-      if (!mounted || !_canPromptPermissions) return;
-      await _donationStore.load();
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (!shouldShowDonationPrompt(
-        neverAskAgain: _donationStore.neverAskAgain,
-        installEpochMs: _donationStore.installEpochMs,
-        lastPromptEpochMs: _donationStore.lastPromptEpochMs,
-        nowEpochMs: now,
-      )) {
-        return;
-      }
-      await _donationStore.markPrompted();
-      if (!mounted || !_canPromptPermissions) return;
-      await showDonateSheet(
-        context,
-        showNeverAgain: true,
-        onNeverAskAgain: _donationStore.setNeverAskAgain,
-      );
-    });
-  }
-
   late final DownloadQueue _downloadQueue;
   late final SnifferBrowserController _browserController;
   late final TextEditingController _urlController;
   late final TextEditingController _adblockSourceController;
   late final TextEditingController _customSearchController;
+  final DonationPromptStore _donationStore = DonationPromptStore();
   late final ValueNotifier<int> _libraryUpdateNotifier;
   final DownloadSettingsStore _settingsStore = const DownloadSettingsStore();
   final ProEntitlement _proEntitlement = ProEntitlement();
@@ -584,6 +559,8 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     tempDirProvider: () => _tempWorkspaceDirectory().then((d) => d.path),
   );
   StreamSubscription<DownloadTask>? _queueSubscription;
+  StreamSubscription<String>? _resniffSuggestedSubscription;
+  final Set<String> _resniffPromptedTaskIds = <String>{};
   DownloadSettings _settings = DownloadSettings.defaults();
   DownloadRuleEngine? _ruleEngine;
   double _speedLimitKbps = 0;
@@ -638,6 +615,7 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     _loadSettingsFuture = _loadSettings();
     unawaited(_initNotifications());
     proUpsellEntitlement = _proEntitlement;
+    unawaited(_proEntitlement.loadCachedEntitlement());
     _downloadQueue.onRestrictedMediaBlocked = (message) {
       if (mounted) _showSnack(message);
     };
@@ -647,7 +625,6 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       // shell therefore does NOT need to rebuild on progress ticks — a
       // per-tick setState here would double every queue-page rebuild
       // (2026-08-07 optimization research, P2).
-      // Log download state transitions.
       final fileName = task.savePath.split('/').last;
       final prevState = _prevTaskStates[task.id];
       if (prevState != task.state) {
@@ -657,11 +634,15 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
             'Task "$fileName": ${prevState?.name ?? "new"} → ${task.state.name}',
           );
         }
-        // Prune terminal tasks so the map stays bounded over a long session
-        // (optimization research 2026-08-07, P13).
-        if (task.state == DownloadState.completed ||
-            task.state == DownloadState.failed) {
-          _prevTaskStates.remove(task.id);
+        if (_prevTaskStates.length > 500) {
+          final activeKeys = _downloadQueue.allTasks.map((t) => t.id).toSet();
+          _prevTaskStates.removeWhere((k, _) => !activeKeys.contains(k));
+          if (_prevTaskStates.length > 500) {
+            final keysToRemove = _prevTaskStates.keys.take(100).toList();
+            for (final k in keysToRemove) {
+              _prevTaskStates.remove(k);
+            }
+          }
         }
       }
       // Soft battery-opt prompt on first download if launch path has not
@@ -670,6 +651,17 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       if (task.state == DownloadState.downloading) {
         unawaited(_promptBatteryOptIfNeeded());
       }
+    });
+    _resniffSuggestedSubscription =
+        _downloadQueue.onResniffSuggested.listen((taskId) {
+      final task = _downloadQueue.getTask(taskId);
+      if (task == null || !mounted) return;
+      if (_resniffPromptedTaskIds.contains(taskId)) return;
+      _resniffPromptedTaskIds.add(taskId);
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _resniffPromptedTaskIds.remove(taskId);
+      });
+      unawaited(_showResniffSuggestedDialog(task));
     });
     _initIntentChannel();
     WidgetsBinding.instance.addObserver(this);
@@ -698,6 +690,34 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       _permissionPromptsAllowed = true;
       unawaited(_requestPostOnboardingPermissions());
       _scheduleDonationPrompt();
+    });
+  }
+
+  static bool _donationPromptScheduled = false;
+
+  void _scheduleDonationPrompt() {
+    if (_donationPromptScheduled) return;
+    _donationPromptScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(seconds: 6));
+      if (!mounted || !_canPromptPermissions) return;
+      await _donationStore.load();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (!shouldShowDonationPrompt(
+        neverAskAgain: _donationStore.neverAskAgain,
+        installEpochMs: _donationStore.installEpochMs,
+        lastPromptEpochMs: _donationStore.lastPromptEpochMs,
+        nowEpochMs: now,
+      )) {
+        return;
+      }
+      await _donationStore.markPrompted();
+      if (!mounted || !_canPromptPermissions) return;
+      await showDonateSheet(
+        context,
+        showNeverAgain: true,
+        onNeverAskAgain: _donationStore.setNeverAskAgain,
+      );
     });
   }
 
@@ -1002,6 +1022,7 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     _adblockRefreshTimer?.cancel();
     _resniffModeTimer?.cancel();
     _queueSubscription?.cancel();
+    _resniffSuggestedSubscription?.cancel();
     _urlController.dispose();
     _sniffedCountNotifier.dispose();
     _libraryUpdateNotifier.dispose();
@@ -1263,6 +1284,19 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     final headers = _buildManualDownloadHeaders(rawUrl);
 
     if (isTorrent) {
+      final engineErr =
+          await TorrentDownloader.checkNativeEngineAvailability();
+      if (engineErr != null) {
+        if (mounted) {
+          await showTorrentEngineUnavailableDialog(
+            context,
+            reason: engineErr,
+          );
+        }
+        _urlController.clear();
+        return;
+      }
+
       final task = DownloadTask(
         id: id,
         url: rawUrl,
@@ -1277,7 +1311,6 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
         ),
         tempDir: '${tempDir.path}/$id',
       );
-      bool force = false;
       if (_downloadQueue.urlExists(rawUrl)) {
         if (!mounted) return;
         final result = await _showDuplicatePrompt(context, 'Torrent');
@@ -1291,9 +1324,8 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
             await _downloadQueue.cancelTaskAsync(existing.id);
           }
         }
-        force = true;
       }
-      _downloadQueue.addTask(task, force: force);
+      _downloadQueue.addTask(task);
       _urlController.clear();
       _showSnack('Done \u2014 torrent added to queue.');
       if (mounted) setState(() {});
@@ -1437,90 +1469,294 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
   /// a dialog asking the user whether to update or create a new download.
   Future<void> _resniffAuto(DownloadTask task) async {
     try {
-      // P4: use the headless TokenRefreshService instead of opening a visible
-      // browser tab. The user never sees the source page load; revival runs in
-      // a background WebView. Manual refresh stays free for everyone.
-      String? freshUrl = await TokenRefreshService.refresh(task);
-      if (freshUrl == null || freshUrl == task.url) {
-        if (mounted) {
-          _showSnack('Link is still valid. No update needed.');
-        }
-        return;
-      }
-
-      // If the fresh URL is the same, nothing to do.
-      if (_normalizeForCompare(freshUrl) == _normalizeForCompare(task.url)) {
-        if (mounted) _showSnack('Link is unchanged. No update needed.');
-        return;
-      }
-
+      final result = await TokenRefreshService.refresh(task);
       if (!mounted) return;
-      final choice = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('New Link Detected'),
-          content: const Text(
-            'A fresher link is available for this download. '
-            'Update the current one or start a separate download.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop('cancel'),
-              child: const Text('Cancel'),
+
+      switch (result) {
+        case ResniffSuccess(:final url, :final headers):
+          if (_normalizeForCompare(url) == _normalizeForCompare(task.url)) {
+            _showSnack('Link token was refreshed with current stream URL.');
+            return;
+          }
+
+          final choice = await showDialog<String>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('New Link Detected'),
+              content: const Text(
+                'A fresher link is available for this download. '
+                'Update the current one or start a separate download.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop('cancel'),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop('new'),
+                  child: const Text('Create New'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop('update'),
+                  child: const Text('Update Link'),
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop('new'),
-              child: const Text('Create New'),
+          );
+          if (!mounted) return;
+          if (choice == 'update') {
+            final donor = DownloadTask(
+              id: 'donor_${task.id}',
+              url: url,
+              headers: headers ?? task.headers,
+              savePath: task.savePath,
+              tempDir: task.tempDir,
+              contentType: task.contentType,
+              sourcePageUrl: task.sourcePageUrl,
+            );
+            donor.copyBrowserBridgesFrom(task);
+            await _downloadQueue.updateTaskFromDonor(task.id, donor);
+            if (mounted) {
+              _showSnack('Link updated. Download will retry.');
+              setState(() {});
+            }
+          } else if (choice == 'new') {
+            final newId = DateTime.now().microsecondsSinceEpoch.toString();
+            final baseDir = await _completedWorkspaceDirectory();
+            final tempDir = await _tempWorkspaceDirectory();
+            final newSavePath = FilenameService.uniquePath(
+              p.join(baseDir.path, _taskFileName(url)),
+              reservedPaths: _downloadQueue.allTasks.map((t) => t.savePath),
+            );
+            final newTask = DownloadTask(
+              id: newId,
+              url: url,
+              headers: headers ?? task.headers,
+              savePath: newSavePath,
+              tempDir: '${tempDir.path}/$newId',
+              contentType: task.contentType,
+              sourcePageUrl: task.sourcePageUrl,
+            );
+            newTask.copyBrowserBridgesFrom(task);
+            _downloadQueue.addTask(newTask, force: true);
+            if (mounted) {
+              _showSnack('Done \u2014 new download created with refreshed link.');
+              setState(() {});
+            }
+          }
+
+        case ResniffUnchanged():
+          _showSnack('Link stream has not changed on the source page.');
+
+        case ResniffNoMediaFound(:final details, :final candidatesInspected):
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('No Media Stream Detected'),
+              content: Text(
+                'No active media stream could be extracted headlessly '
+                '($candidatesInspected candidates inspected).\n\n'
+                'The video player may require manual interaction or playback to start.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Dismiss'),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                  label: const Text('Open in Browser'),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _resniffManual(task);
+                  },
+                ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop('update'),
-              child: const Text('Update Link'),
+          );
+
+        case ResniffChallengeDetected(:final challengeType):
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Bot Challenge Detected'),
+              content: Text(
+                'The website presented a bot protection challenge '
+                '(${challengeType.replaceAll('_', ' ')}). '
+                'Headless revival cannot bypass this challenge automatically.\n\n'
+                'Open the page in the browser to solve the verification.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Dismiss'),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                  label: const Text('Solve in Browser'),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _resniffManual(task);
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
-      );
-      if (choice == 'update') {
-        // Build a donor with the fresh URL so updateTaskFromDonor can rebind
-        // bridges, refresh cookies, and wipe stale segments when the token
-        // changed. Plain URL swap left restored tasks without WebView context.
-        final donor = DownloadTask(
-          id: 'donor_${task.id}',
-          url: freshUrl,
-          headers: task.headers,
-          savePath: task.savePath,
-          tempDir: task.tempDir,
-          contentType: task.contentType,
-          sourcePageUrl: task.sourcePageUrl,
-        );
-        donor.copyBrowserBridgesFrom(task);
-        await _downloadQueue.updateTaskFromDonor(task.id, donor);
-        if (mounted) {
-          _showSnack('Link updated. Download will retry.');
-          setState(() {});
-        }
-      } else if (choice == 'new') {
-        final newId = DateTime.now().microsecondsSinceEpoch.toString();
-        final baseDir = await _completedWorkspaceDirectory();
-        final tempDir = await _tempWorkspaceDirectory();
-        final newTask = DownloadTask(
-          id: newId,
-          url: freshUrl,
-          headers: task.headers,
-          savePath: '${baseDir.path}/${_taskFileName(freshUrl)}',
-          tempDir: '${tempDir.path}/$newId',
-          contentType: task.contentType,
-          sourcePageUrl: task.sourcePageUrl,
-        );
-        newTask.copyBrowserBridgesFrom(task);
-        _downloadQueue.addTask(newTask, force: true);
-        if (mounted) {
-          _showSnack('Done \u2014 new download created with refreshed link.');
-          setState(() {});
-        }
+          );
+
+        case ResniffPageLoadTimeout(:final elapsed):
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Page Load Timed Out'),
+              content: Text(
+                'The source page took longer than ${elapsed.inSeconds}s to load in the background.\n\n'
+                'You can open the page in the interactive browser to load and refresh the stream.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Dismiss'),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                  label: const Text('Open in Browser'),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _resniffManual(task);
+                  },
+                ),
+              ],
+            ),
+          );
+
+        case ResniffSourceUnavailable(:final statusCode, :final error, :final isDnsFailure):
+          final reason = isDnsFailure
+              ? 'DNS resolution failed. Check your internet connection.'
+              : (error ?? (statusCode != null ? 'HTTP status $statusCode' : 'Page unreachable'));
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Source Page Unavailable'),
+              content: Text(
+                'Could not load the source page.\n\nReason: $reason',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Dismiss'),
+                ),
+                if (task.sourcePageUrl != null)
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                    label: const Text('Open in Browser'),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _resniffManual(task);
+                    },
+                  ),
+              ],
+            ),
+          );
+
+        case ResniffPlayerInteractionRequired(:final details):
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Manual Play Required'),
+              content: Text(
+                'The video player requires manual play interaction to initiate media streaming.\n\n'
+                '${details ?? "Open the page and tap play to refresh the download link."}',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Dismiss'),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.play_circle_outline, size: 18),
+                  label: const Text('Open & Play'),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _resniffManual(task);
+                  },
+                ),
+              ],
+            ),
+          );
       }
     } catch (e, s) {
       _logError('Auto-resniff failed', e, s);
-      if (mounted) _showSnack('Link refresh failed. $e');
+      if (mounted) _showSnack('Link refresh failed: $e');
+    }
+  }
+
+  /// Shown when a link exhausts auto-retries (attempts >= retryLimit).
+  /// Offers auto-resniff, manual resniff, and dismiss with honest diagnostics.
+  Future<void> _showResniffSuggestedDialog(DownloadTask task) async {
+    if (!mounted) return;
+    final name = task.savePath.split('/').last;
+    final lastRes = task.lastResniffResult;
+    final diagnosticMsg = lastRes != null && !lastRes.isSuccess
+        ? lastRes.userFacingMessage
+        : (task.errorMessage ?? 'Download failed repeatedly (expired link or network block).');
+
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Link Refresh Needed'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '"$name" could not complete after multiple attempts.',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                diagnosticMsg,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Would you like to attempt an automatic background refresh or open the source page in the browser?',
+              style: TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('dismiss'),
+            child: const Text('Dismiss'),
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+            onPressed: () => Navigator.of(ctx).pop('manual'),
+            label: const Text('Open in Browser'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.find_replace_rounded, size: 16),
+            onPressed: () => Navigator.of(ctx).pop('auto'),
+            label: const Text('Refresh Automatically'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (choice == 'auto') {
+      await _resniffAuto(task);
+    } else if (choice == 'manual') {
+      await _resniffManual(task);
     }
   }
 
@@ -1529,13 +1765,13 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
   /// queue into "resniff mode" so that duplicate URLs trigger a dialog
   /// instead of being silently skipped.
   Future<void> _resniffManual(DownloadTask task) async {
-    _downloadQueue.resniffPendingTaskId = task.id;
+    _downloadQueue.startResniffSession(task);
     // Auto-expire resniff mode so a stale pending task doesn't surprise the
     // user with a dialog later if they never re-sniff a matching URL.
     _resniffModeTimer?.cancel();
     _resniffModeTimer = Timer(const Duration(minutes: 5), () {
       if (_downloadQueue.resniffPendingTaskId == task.id) {
-        _downloadQueue.resniffPendingTaskId = null;
+        _downloadQueue.clearResniffSession();
       }
     });
     final target = task.sourcePageUrl ?? task.url;
@@ -1544,7 +1780,7 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     );
     _openUrlInBrowserAfterTabReady(target);
     if (mounted) {
-      _showSnack('Source page opened. Tap the media to refresh the link.');
+      _showSnack('Source page opened. Play the video to refresh the download link.');
     }
   }
 
@@ -1697,6 +1933,10 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
         queue: _downloadQueue,
         entitlement: _proEntitlement,
       );
+
+      if (kScreenshotMode) {
+        _browserOpenRequestBus.request('https://www.pexels.com/videos/');
+      }
 
       if (mounted) setState(() {});
     } catch (e, s) {
@@ -1891,6 +2131,11 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
         expectedHash: task.expectedHash,
       );
       newTask.copyBrowserBridgesFrom(task);
+      // Redownload of a failed entry replaces it — otherwise the queue shows
+      // two rows for the same URL (old `failed` + new `downloading`).
+      if (task.state == DownloadState.failed) {
+        await _downloadQueue.cancelTaskAsync(task.id);
+      }
       _downloadQueue.addTask(newTask, force: true);
       if (mounted) {
         _showSnack('Redownload started.');
@@ -1932,13 +2177,44 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
     }
   }
 
+  /// Materializes a completed task to a real filesystem path if its private
+  /// copy was deleted after publishing to MediaStore.
+  Future<String?> _materializeSourceForTask(DownloadTask task) async {
+    final path = task.savePath;
+    if (await File(path).exists()) return path;
+
+    final uri = task.publicUri?.trim();
+    if (uri != null && uri.isNotEmpty) {
+      try {
+        final docs = await getApplicationDocumentsDirectory();
+        final dir = Directory(p.join(docs.path, 'temp_sources'));
+        if (!dir.existsSync()) await dir.create(recursive: true);
+        var baseName = p.basename(task.savePath);
+        if (baseName.isEmpty || baseName == '.') baseName = 'download';
+        final dest = p.join(dir.path, baseName);
+        final copied = await const MethodChannel(
+          'aurora_downloader/public_downloads',
+        ).invokeMethod<String>('copyContentUriToFile', {
+          'uri': uri,
+          'destPath': dest,
+        });
+        if (copied != null && copied.isNotEmpty && File(copied).existsSync()) {
+          return copied;
+        }
+      } catch (e) {
+        debugPrint('[Main] Failed to materialize source: $e');
+      }
+    }
+    return null;
+  }
+
   /// P6 — Send the completed download to a PC over the local network.
   Future<void> _sendToPc(DownloadTask task) async {
     try {
-      final source = await _resolvedCompletedSource(task);
-      if (source == null || !source.startsWith('/')) {
+      final source = await _materializeSourceForTask(task);
+      if (source == null) {
         if (!mounted) return;
-        _showSnack('Couldn’t send — the file isn’t available locally yet.');
+        _showSnack('Couldn’t send — the file isn’t available locally.');
         return;
       }
       final tier = _proEntitlement.tier;
@@ -1995,17 +2271,18 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
       );
       return;
     }
-    final file = File(task.savePath);
-    if (!await file.exists()) {
-      _showSnack('File not found: ${task.savePath}');
-      return;
-    }
     // Deleting the source file out from under an unfinished download would
     // corrupt the download (e.g. a seeding torrent or a paused/partial file).
     if (task.state != DownloadState.completed) {
       _showSnack('Only completed downloads can be moved to the vault.');
       return;
     }
+    final sourcePath = await _materializeSourceForTask(task);
+    if (sourcePath == null) {
+      _showSnack('File not found: ${task.savePath}');
+      return;
+    }
+    final file = File(sourcePath);
     final vaultName = await _vaultService.store(file, tier: tier);
     if (vaultName != null) {
       try {

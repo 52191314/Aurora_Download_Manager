@@ -82,15 +82,10 @@ void main() {
   });
 
   group('addFavorite', () {
-    test('free tier stops at the inventory cap', () async {
-      final full = _lib(
-        favorites: [
-          for (var i = 0; i < ProFeatures.freeVideoLibraryItems; i++)
-            _video('v$i'),
-        ],
-      );
+    test('free tier is blocked (Pro-only)', () async {
+      final empty = _lib();
       final result = await VideoLibrary.addFavorite(
-        library: full,
+        library: empty,
         tier: EntitlementTier.free,
         url: 'https://cdn.example.com/new.mp4',
         title: 'New',
@@ -102,7 +97,7 @@ void main() {
     test('pro is unlimited', () async {
       final full = _lib(
         favorites: [
-          for (var i = 0; i < ProFeatures.freeVideoLibraryItems + 5; i++)
+          for (var i = 0; i < 20; i++)
             _video('v$i'),
         ],
       );
@@ -115,24 +110,11 @@ void main() {
       expect(result.outcome, VideoSaveOutcome.saved);
     });
 
-    test('site bookmarks do not count against the video cap', () async {
-      final lib = _lib(
-        favorites: [for (var i = 0; i < 50; i++) _site('s$i')],
-      );
-      final result = await VideoLibrary.addFavorite(
-        library: lib,
-        tier: EntitlementTier.free,
-        url: 'https://cdn.example.com/new.mp4',
-        title: 'New',
-      );
-      expect(result.outcome, VideoSaveOutcome.saved);
-    });
-
     test('saving the same video twice is reported, not duplicated', () async {
       final lib = _lib(favorites: [_video('v1')]);
       final result = await VideoLibrary.addFavorite(
         library: lib,
-        tier: EntitlementTier.free,
+        tier: EntitlementTier.pro,
         url: 'https://cdn.example.com/v1.mp4',
         title: 'Again',
       );
@@ -182,7 +164,7 @@ void main() {
 
     test('free tier keeps a rolling window of the newest entries', () {
       var lib = _lib();
-      for (var i = 0; i < ProFeatures.freeVideoLibraryItems + 4; i++) {
+      for (var i = 0; i < 14; i++) {
         lib = VideoLibrary.recordPlay(
           library: lib,
           tier: EntitlementTier.free,
@@ -192,7 +174,7 @@ void main() {
       }
       expect(
         lib.videoHistory,
-        hasLength(ProFeatures.freeVideoLibraryItems),
+        hasLength(10),
       );
       // Newest survives, oldest is dropped — not the other way round.
       final urls = lib.videoHistory.map((h) => h.url);

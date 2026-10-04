@@ -20,6 +20,7 @@ import 'package:aurora_downloader/sniffer/player/playback_engine.dart';
 import 'package:aurora_downloader/sniffer/player/playback_source.dart';
 import 'package:aurora_downloader/sniffer/models/browser_tab.dart';
 import 'package:aurora_downloader/sniffer/models/sniffed_media.dart';
+import 'package:aurora_downloader/dev/screenshot_fixtures.dart';
 
 /// Resolves the live URL/headers for [media] and shows either the
 /// in-app PIP player (video/audio) or the read-only media preview
@@ -76,6 +77,33 @@ Future<void> showMediaPreview(
       child: const Center(child: CircularProgressIndicator()),
     ),
   );
+
+  if (kScreenshotMode) {
+    if (!isMounted()) return;
+    Navigator.pop(context);
+    await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AuroraPlayerScreen(
+          initialEngine: engine,
+          onEnginePreferenceChanged: onEngineChanged,
+          resolveHeadersForUrl: (u) async => const {},
+          source: PlaybackSource(
+            url: media.url,
+            title: media.name.isNotEmpty ? media.name : '16172096_360_640_30fps.mp4',
+            headers: const {},
+            sourcePageUrl: media.sourcePageUrl,
+            variants: const [
+              PlaybackVariant(url: '', label: '1080p Full HD', height: 1080),
+              PlaybackVariant(url: '', label: '720p HD', height: 720),
+              PlaybackVariant(url: '', label: '360p SD', height: 360),
+            ],
+          ),
+        ),
+      ),
+    );
+    return;
+  }
 
   String resolvedUrl = media.url;
   Map<String, String> resolvedHeaders = {};
@@ -197,6 +225,9 @@ Future<void> showMediaPreview(
         ),
       ),
     );
+    try {
+      await activeTab.controller.resumeWebView();
+    } catch (_) {}
     if (!isMounted()) return;
     if (result == 'download') {
       await onAddToQueue(finalMedia);

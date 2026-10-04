@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_localizations.dart';
 
 import '../../premium/pro_entitlement.dart';
-import '../../premium/oss_upsell.dart';
+import '../../premium/pro_upsell_sheet.dart';
 import '../browser_library.dart';
 import '../models/browser_tab.dart';
 import '../video_library.dart';
@@ -427,7 +427,11 @@ class _FavoritesSheetContentState extends State<FavoritesSheetContent>
               },
               onOpenSourcePage: (fav) {
                 Navigator.of(context).pop();
-                unawaited(widget.onLoadUrl(fav.sourcePageUrl!));
+                final target = (fav.sourcePageUrl != null &&
+                        fav.sourcePageUrl!.trim().isNotEmpty)
+                    ? fav.sourcePageUrl!.trim()
+                    : fav.url;
+                unawaited(widget.onLoadUrl(target));
               },
               onRemove: (fav) async {
                 await _onLibrarySaved(

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import '../dev/screenshot_fixtures.dart';
 import 'browser_controller.dart';
 import 'pull_to_refresh_tracker.dart';
 
@@ -83,7 +84,7 @@ class _BrowserWidgetState extends State<BrowserWidget> {
       final initialRequest = (seed != null &&
               seed.isNotEmpty &&
               seed != 'about:blank' &&
-              !ctrl.cloudflareStealthEnabled)
+              (!ctrl.cloudflareStealthEnabled || kScreenshotMode))
           ? URLRequest(url: WebUri(seed))
           : null;
       return _GestureWrappedWebView(
@@ -106,6 +107,8 @@ class _BrowserWidgetState extends State<BrowserWidget> {
             allowContentAccess: false,
             domStorageEnabled: true,
             databaseEnabled: true,
+            cacheEnabled: true,
+            cacheMode: CacheMode.LOAD_DEFAULT,
             mediaPlaybackRequiresUserGesture: false,
             transparentBackground: false,
             rendererPriorityPolicy: RendererPriorityPolicy(

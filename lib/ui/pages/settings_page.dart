@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../downloader/downloader.dart';
 import '../../downloader/download_rules.dart';
@@ -174,6 +175,8 @@ class _SettingsPageState extends State<SettingsPage> {
       case SettingsSection.appearance:
         return _buildAppearancePage();
       case SettingsSection.backup:
+        return _buildBackupPage();
+      case SettingsSection.drive:
         return _buildBackupPage();
       case SettingsSection.pro:
         return _buildProPage();
@@ -2009,7 +2012,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           Panel(child: Column(
             children: [
-              Text('Aurora Download Manager',
+              Text('Optimus Download Manager (ODM)',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.ac.textPrimary)),
               const SizedBox(height: 4),
               Text('v1.3.1+80', style: TextStyle(fontSize: 13, color: context.ac.textSecondary)),
@@ -2022,12 +2025,32 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           )),
           const SizedBox(height: 16),
-          Panel(child: ListTile(
-            leading: Icon(Icons.favorite_rounded, color: context.ac.accentFrost),
-            title: const Text('Support development'),
-            subtitle: const Text('Donate via Patreon or USDT (BEP20)'),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => showDonateSheet(context),
+          Panel(child: Column(
+            children: [
+              ListTile(
+                leading: Icon(Icons.favorite_rounded, color: context.ac.accentFrost),
+                title: const Text('Support development'),
+                subtitle: const Text('Donate via Patreon or USDT (BEP20)'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => showDonateSheet(context),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.chat_rounded, color: context.ac.statusSuccess),
+                title: const Text('WhatsApp Support'),
+                subtitle: Text('Join our WhatsApp community', style: TextStyle(fontSize: 12, color: context.ac.textSecondary)),
+                trailing: Icon(Icons.open_in_new_rounded, color: context.ac.textTertiary, size: 20),
+                onTap: () => launchUrl(Uri.parse('https://chat.whatsapp.com/G7m3c8lhzwR3M0gdxTplE2'), mode: LaunchMode.externalApplication),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.telegram_rounded, color: context.ac.accentFrost),
+                title: const Text('Telegram Support'),
+                subtitle: Text('Join our Telegram community', style: TextStyle(fontSize: 12, color: context.ac.textSecondary)),
+                trailing: Icon(Icons.open_in_new_rounded, color: context.ac.textTertiary, size: 20),
+                onTap: () => launchUrl(Uri.parse('https://t.me/+3nBHMTePDUY2YmQ1'), mode: LaunchMode.externalApplication),
+              ),
+            ],
           )),
           const SizedBox(height: 16),
           Panel(child: Column(

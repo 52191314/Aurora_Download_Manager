@@ -33,13 +33,43 @@ class NativeDownloadClient {
     'aurora_downloader/native_download',
   );
 
+  /// Case-insensitive header lookup. Empty values are treated as missing.
+  static String? headerValue(Map<String, String>? headers, String name) {
+    if (headers == null || headers.isEmpty) return null;
+    final want = name.toLowerCase();
+    for (final e in headers.entries) {
+      if (e.key.toLowerCase() == want && e.value.isNotEmpty) return e.value;
+    }
+    return null;
+  }
+
+  /// Resolves a Cookie header from an explicit value, a live cookie-jar map,
+  /// or a request-header map. Live jar wins over stale task headers.
+  static String? cookieHeaderFrom({
+    String? explicit,
+    Map<String, String>? headers,
+    Map<String, String>? providerCookies,
+  }) {
+    if (explicit != null && explicit.isNotEmpty) return explicit;
+    if (providerCookies != null && providerCookies.isNotEmpty) {
+      final direct = headerValue(providerCookies, 'Cookie');
+      if (direct != null) return direct;
+      final flattened = providerCookies.entries
+          .where((e) => e.key.toLowerCase() != 'cookie')
+          .map((e) => '${e.key}=${e.value}')
+          .join('; ');
+      if (flattened.isNotEmpty) return flattened;
+    }
+    return headerValue(headers, 'Cookie');
+  }
+
   /// Downloads a single chunk through the native OkHttp engine.
   ///
   /// [url] — the full chunk URL.
   /// [filePath] — absolute path where the chunk bytes should be written.
   /// [rangeStart], [rangeEnd] — byte range (pass null/0 for no range).
-  /// [headers] — optional HTTP headers (Referer, Origin, User-Agent, etc.).
-  /// [cookieHeader] — optional Cookie header value.
+  /// [headers] — optional HTTP headers (Referer, Origin, User-Agent, Cookie, Authorization).
+  /// [cookieHeader] — optional Cookie header value (overrides [headers]).
   /// [downloadId] — optional custom unique ID for cancellation tracking.
   ///
   /// Returns a [NativeChunkResult] on success, or `null` if the native
@@ -62,6 +92,9 @@ class NativeDownloadClient {
       rangeHeader = 'bytes=$rangeStart-$rangeEnd';
     }
 
+    final cookie = cookieHeaderFrom(explicit: cookieHeader, headers: headers);
+    final authorization = headerValue(headers, 'Authorization');
+
     try {
       final result = await _channel.invokeMapMethod<String, dynamic>(
         'downloadChunk',
@@ -69,11 +102,12 @@ class NativeDownloadClient {
           'url': url,
           'filePath': filePath,
           'rangeHeader': rangeHeader,
-          'referer': headers?['Referer'] ?? '',
-          'origin': headers?['Origin'] ?? '',
-          'userAgent': headers?['User-Agent'] ?? '',
-          if (cookieHeader != null && cookieHeader.isNotEmpty)
-            'cookie': cookieHeader,
+          'referer': headerValue(headers, 'Referer') ?? '',
+          'origin': headerValue(headers, 'Origin') ?? '',
+          'userAgent': headerValue(headers, 'User-Agent') ?? '',
+          if (cookie != null && cookie.isNotEmpty) 'cookie': cookie,
+          if (authorization != null && authorization.isNotEmpty)
+            'authorization': authorization,
           if (downloadId != null)
             'downloadId': downloadId,
         },

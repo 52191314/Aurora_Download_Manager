@@ -14,12 +14,14 @@ import 'hls_downloader.dart';
 import 'speed_limiter.dart';
 import 'torrent_downloader.dart';
 import '../platform/download_foreground_service.dart';
+import '../platform/ts_remux_service.dart';
 import '../settings/download_settings.dart' show ProxyType;
 import '../sniffer/sniffer_url_utils.dart';
 import 'file_classifier.dart';
 import 'filename_service.dart';
 import 'media_file_types.dart';
 import '../compliance/restricted_media_policy.dart';
+import '../sniffer/stream_matcher.dart';
 
 void _logError(String context, Object error, [StackTrace? stack]) {
   debugPrint('[DownloadQueue] $context: $error');
@@ -146,6 +148,13 @@ class DownloadQueue {
       StreamController<String>.broadcast();
   Stream<String> get onTaskRemoved => _taskRemovedController.stream;
 
+  /// Fired when a task exhausts auto-retries (`attempts >= retryLimit`).
+  /// Payload is the `taskId`; UI should offer to resniff the link rather
+  /// than silently leaving a zombie `failed` row. See issue #13.
+  final StreamController<String> _resniffSuggestedController =
+      StreamController<String>.broadcast();
+  Stream<String> get onResniffSuggested => _resniffSuggestedController.stream;
+
   /// Per-task progress notifiers (P1b): the queue page drives each card's
   /// live progress area with these instead of rebuilding the whole list on
   /// every tick. Created lazily on first emit; disposed on removal/close.
@@ -177,6 +186,33 @@ class DownloadQueue {
   /// the task with this ID will trigger [onResniffDuplicate] instead of
   /// being silently skipped.  Set to null to exit resniff mode.
   String? resniffPendingTaskId;
+
+  ResniffSession? _activeResniffSession;
+
+  /// Returns the active [ResniffSession], if any.
+  ResniffSession? get activeResniffSession => _activeResniffSession;
+
+  /// Sets or clears the active [ResniffSession] and synchronizes [resniffPendingTaskId].
+  set activeResniffSession(ResniffSession? session) {
+    _activeResniffSession = session;
+    resniffPendingTaskId = session?.taskId;
+  }
+
+  /// Starts a resniff session for [task].
+  void startResniffSession(DownloadTask task) {
+    activeResniffSession = ResniffSession(
+      taskId: task.id,
+      taskName: p.basename(task.savePath),
+      originalUrl: task.url,
+      sourcePageUrl: task.sourcePageUrl ?? task.url,
+    );
+  }
+
+  /// Clears the active resniff session.
+  void clearResniffSession() {
+    _activeResniffSession = null;
+    resniffPendingTaskId = null;
+  }
 
   /// Called when a URL is added that duplicates an existing task while
   /// [resniffPendingTaskId] is set.  The queue page uses this to ask the
@@ -454,8 +490,10 @@ class DownloadQueue {
     }
   }
 
-  void addTask(DownloadTask task, {bool force = false}) {
-    if (_isDisposed) return;
+  static String normalizeUrl(String url) => _normalizeUrl(url);
+
+  bool addTask(DownloadTask task, {bool force = false}) {
+    if (_isDisposed) return false;
     // Play compliance: never enqueue restricted platform media (Wave 1+).
     // (See lib/compliance/restricted_media_policy.dart.)
     if (RestrictedMediaPolicy.isBlocked(
@@ -467,48 +505,81 @@ class DownloadQueue {
       onRestrictedMediaBlocked?.call(
         RestrictedMediaPolicy.userMessageRestricted,
       );
-      return;
+      return false;
     }
     _autoRetryAttempts.remove(task.id);
     if (!force && !_isLoading) {
-      // Duplicate prevention: skip if a task with the same URL is already
-      // in the queue (idle, downloading, or paused). Completed/failed tasks
-      // don't block re-downloading the same URL.
-      // Guard with !_isLoading so the O(n) scan per task does not compound
-      // to O(n²) during queue-file restore (the persisted file is
-      // authoritative and should never contain duplicates).
       final normalizedUrl = _normalizeUrl(task.url);
-      final existing = _tasks.values.where(
-        (t) =>
-            _normalizeUrl(t.url) == normalizedUrl &&
-            (t.state == DownloadState.idle ||
-                t.state == DownloadState.downloading ||
-                t.state == DownloadState.paused),
-      );
-      if (existing.isNotEmpty) {
-        // When resniff mode is active and the duplicate belongs to the
-        // pending resniff task, delegate to the callback so the user can
-        // choose "Update existing" or "Create new".
-        if (resniffPendingTaskId != null &&
-            onResniffDuplicate != null &&
-            resniffPendingTaskId == existing.first.id) {
-          onResniffDuplicate!(resniffPendingTaskId!, task);
-          return;
+
+      // If this is a backup import, perform strict deduplication across ALL tasks
+      // (including completed/failed/scheduled) by ID or normalized URL to keep only unique tasks.
+      if (task.isBackupImport) {
+        if (_tasks.containsKey(task.id)) {
+          _warn('Task ${task.id} already exists in queue, skipping import.');
+          return false;
         }
-        _warn('Already in queue: ${task.url}');
-        return;
-      }
-      // Resniff mode: a freshly sniffed URL that looks like the same media
-      // as the pending task (same scheme/host/path, e.g. a token-refreshed
-      // variant with a different query string) is routed to the resniff
-      // dialog instead of being added as a silent new download. This is what
-      // makes "Update Existing" actually receive a *new* URL rather than the
-      // identical one already in the queue.
-      if (resniffPendingTaskId != null && onResniffDuplicate != null) {
-        final pending = _tasks[resniffPendingTaskId];
-        if (pending != null && _isLikelySameMedia(pending.url, task.url)) {
-          onResniffDuplicate!(resniffPendingTaskId!, task);
-          return;
+        final existingByUrl = _tasks.values.where(
+          (t) => _normalizeUrl(t.url) == normalizedUrl,
+        );
+        if (existingByUrl.isNotEmpty) {
+          _warn('Task URL ${task.url} already exists in queue, skipping import.');
+          return false;
+        }
+      } else {
+        // Normal duplicate prevention: skip if a task with the same URL is already
+        // in the queue (idle, downloading, or paused). Completed/failed tasks
+        // don't block re-downloading the same URL.
+        // Guard with !_isLoading so the O(n) scan per task does not compound
+        // to O(n²) during queue-file restore (the persisted file is
+        // authoritative and should never contain duplicates).
+        final existing = _tasks.values.where(
+          (t) =>
+              _normalizeUrl(t.url) == normalizedUrl &&
+              (t.state == DownloadState.idle ||
+                  t.state == DownloadState.downloading ||
+                  t.state == DownloadState.paused),
+        );
+        if (existing.isNotEmpty) {
+          // When resniff mode is active and the duplicate belongs to the
+          // pending resniff task, delegate to the callback so the user can
+          // choose "Update existing" or "Create new".
+          final pendingId =
+              resniffPendingTaskId ?? _activeResniffSession?.taskId;
+          if (pendingId != null &&
+              onResniffDuplicate != null &&
+              pendingId == existing.first.id) {
+            onResniffDuplicate!(pendingId, task);
+            return false;
+          }
+          _warn('Already in queue: ${task.url}');
+          return false;
+        }
+        // Resniff mode: a freshly sniffed URL that matches the pending task
+        // (via StreamMatcher or active ResniffSession) is routed to the resniff
+        // dialog instead of being added as a silent new download.
+        if ((resniffPendingTaskId != null || _activeResniffSession != null) &&
+            onResniffDuplicate != null) {
+          final pendingId =
+              resniffPendingTaskId ?? _activeResniffSession?.taskId;
+          final pending = pendingId != null ? _tasks[pendingId] : null;
+          if (pending != null) {
+            bool matches = false;
+            if (_activeResniffSession != null) {
+              matches = _activeResniffSession!.matchesCandidate(task.url);
+            } else {
+              matches = _isLikelySameMedia(pending.url, task.url) ||
+                  StreamMatcher.findBestMatch(
+                    candidates: [task.url],
+                    originalMediaUrl: pending.url,
+                    sourcePageUrl: pending.sourcePageUrl,
+                  ) !=
+                      null;
+            }
+            if (matches) {
+              onResniffDuplicate!(pending.id, task);
+              return false;
+            }
+          }
         }
       }
     }
@@ -529,7 +600,7 @@ class DownloadQueue {
     // Completed tasks are kept for history only; no downloader needed.
     if (task.state == DownloadState.completed) {
       _emitTask(task);
-      return;
+      return true;
     }
 
     // Blob URLs (e.g. blob:https://example.com/uuid) are created by
@@ -544,7 +615,7 @@ class DownloadQueue {
           'Aurora can\'t download blob: URLs directly. '
           'Look for the .m3u8 or .mpd playlist URL in the captured media list instead.';
       _emitTask(task);
-      return;
+      return true;
     }
 
     // Auto-classify: inject category subfolder into savePath.
@@ -565,6 +636,7 @@ class DownloadQueue {
     if (queuePath != null && !_isLoading) {
       unawaited(saveToFile(queuePath!));
     }
+    return true;
   }
 
   void pauseTask(String taskId) {
@@ -664,9 +736,66 @@ class DownloadQueue {
     }
   }
 
+  static String _stripPlaylistExtensions(String filePath) {
+    var path = filePath;
+    while (true) {
+      final ext = p.extension(path).toLowerCase();
+      if (ext == '.m3u8' || ext == '.m3u' || ext == '.mpd') {
+        path = p.withoutExtension(path);
+      } else {
+        break;
+      }
+    }
+    return path;
+  }
+
+  bool _isTaskMpegTs(DownloadTask task) {
+    if (_isHlsTask(task)) {
+      try {
+        final dir = Directory(task.tempDir);
+        if (dir.existsSync()) {
+          final entities = dir.listSync();
+          for (final entity in entities) {
+            if (entity is File) {
+              final name = p.basename(entity.path);
+              if (name.startsWith('segment_') && name.endsWith('.ts')) {
+                return true;
+              }
+            }
+          }
+          final hasFmp4 = entities.any(
+            (e) =>
+                e is File &&
+                p.basename(e.path).startsWith('segment_') &&
+                (p.basename(e.path).endsWith('.m4s') ||
+                    p.basename(e.path).endsWith('.mp4')),
+          );
+          if (hasFmp4) return false;
+        }
+      } catch (_) {}
+    }
+
+    final ext = p.extension(task.savePath).toLowerCase();
+    if (ext == '.ts') return true;
+
+    final urlLower = task.url.toLowerCase();
+    if (urlLower.contains('.ts') ||
+        task.contentType?.toLowerCase().contains('mp2t') == true ||
+        task.contentType?.toLowerCase().contains('video/ts') == true) {
+      return true;
+    }
+
+    if (_isHlsTask(task)) {
+      return true;
+    }
+
+    return false;
+  }
+
   /// User-initiated force-merge for a failed task. Combines whatever
   /// chunk bytes are still on disk into a usable output file at
-  /// [task.savePath] without re-downloading. Returns true if the
+  /// [task.savePath] without re-downloading. Remuxes MPEG-TS / HLS .m3u8
+  /// streams to .mp4 container when enabled. Returns true if the
   /// destination was written, false otherwise (no data, refused for a
   /// still-downloading task, or unknown task id).
   Future<bool> forceMergeTask(String taskId) async {
@@ -712,14 +841,27 @@ class DownloadQueue {
     task.state = DownloadState.merging;
     task.downloadedBytes = 0;
     task.totalBytes = _isHlsTask(task) ? -1 : task.chunks.length;
+    task.statusMessage = null;
+    task.errorMessage = null;
     _emitTask(task);
 
     try {
+      final isTs = _isTaskMpegTs(task);
+      final rawBase = _stripPlaylistExtensions(task.savePath);
+      final String mergeDestPath;
+
+      if (isTs) {
+        mergeDestPath = '${p.withoutExtension(rawBase)}.ts';
+      } else {
+        final ext = p.extension(rawBase);
+        mergeDestPath = ext.isEmpty ? '$rawBase.mp4' : rawBase;
+      }
+
       final PartialMergeResult result;
       if (_isHlsTask(task)) {
         result = await FileCombiner.combineHlsPartial(
           tempDir: task.tempDir,
-          destination: File(task.savePath),
+          destination: File(mergeDestPath),
           onProgress: (current, total) {
             task.downloadedBytes = current;
             task.totalBytes = total;
@@ -732,7 +874,7 @@ class DownloadQueue {
         result = await FileCombiner.combinePartial(
           chunks: task.chunks,
           tempDir: task.tempDir,
-          destination: File(task.savePath),
+          destination: File(mergeDestPath),
           onProgress: (chunkIndex, totalChunks) {
             task.downloadedBytes = chunkIndex;
             task.totalBytes = totalChunks;
@@ -750,11 +892,59 @@ class DownloadQueue {
         return false;
       }
 
+      String finalPath = mergeDestPath;
+      int finalBytes = result.bytesWritten;
+
+      // Remux MPEG-TS (.ts) → .mp4 if enabled so the finished file plays in any player.
+      if (remuxTsToMp4 &&
+          (isTs || p.extension(mergeDestPath).toLowerCase() == '.ts')) {
+        final mp4Path = '${p.withoutExtension(mergeDestPath)}.mp4';
+        task.statusMessage = 'Converting .ts to .mp4 so it plays in any app.';
+        task.errorMessage = null;
+        _emitTask(task);
+
+        if (mp4Path != mergeDestPath) {
+          try {
+            final oldMp4 = File(mp4Path);
+            if (await oldMp4.exists()) {
+              await oldMp4.delete();
+            }
+          } catch (_) {}
+        }
+
+        final remux = await TsRemuxService.remuxTsToMp4(mergeDestPath, mp4Path);
+        if (remux.success) {
+          try {
+            await File(mergeDestPath).delete();
+          } catch (_) {}
+          finalPath = mp4Path;
+          try {
+            final mp4File = File(mp4Path);
+            if (await mp4File.exists()) {
+              finalBytes = await mp4File.length();
+            }
+          } catch (_) {}
+          task.statusMessage = null;
+          task.errorMessage = null;
+        } else {
+          debugPrint(
+            'TS→MP4 remux failed for ${task.savePath.split("/").last}: '
+            '${remux.error ?? "unknown"}',
+          );
+          finalPath = mergeDestPath;
+          task.statusMessage = null;
+          task.errorMessage =
+              'Couldn\'t convert to .mp4 — keeping original .ts. '
+              'Open it in a player that supports MPEG-TS, or re-download. '
+              '${remux.error ?? "The stream may use an unsupported codec."}';
+        }
+      }
+
+      task.savePath = finalPath;
       task.state = DownloadState.completed;
-      task.downloadedBytes = result.bytesWritten;
-      task.totalBytes = result.bytesWritten;
+      task.downloadedBytes = finalBytes;
+      task.totalBytes = finalBytes;
       task.actualHash = null;
-      task.errorMessage = null;
 
       if (autoClassifyEnabled) {
         final oldPath = task.savePath;
@@ -800,6 +990,7 @@ class DownloadQueue {
       task.state = DownloadState.failed;
       task.failureReason = DownloadFailure.mergeFailed;
       task.errorMessage = 'Force merge failed. Error: $e';
+      task.statusMessage = null;
       _emitTask(task);
       if (queuePath != null && !_isLoading) {
         unawaited(saveToFile(queuePath!));
@@ -1003,6 +1194,12 @@ class DownloadQueue {
       existing.state = DownloadState.idle;
     }
 
+    if (existingTaskId == resniffPendingTaskId ||
+        existingTaskId == _activeResniffSession?.taskId) {
+      resniffPendingTaskId = null;
+      _activeResniffSession = null;
+    }
+
     await prepareBrowserContext(existing);
 
     debugPrint(
@@ -1014,6 +1211,73 @@ class DownloadQueue {
     );
 
     await resumeTaskAsync(existingTaskId);
+  }
+
+  /// Updates an existing task's URL, headers, and content type directly,
+  /// wipes temporary files when the token/URL changes, clears error state,
+  /// synchronizes browser context, clears resniff session, and resumes download.
+  Future<void> updateTaskUrl(
+    String taskId,
+    String newUrl, {
+    Map<String, String>? headers,
+    String? contentType,
+    bool wipeOnUrlChange = true,
+    bool autoResume = true,
+  }) async {
+    final existing = _tasks[taskId];
+    if (existing == null) {
+      debugPrint('updateTaskUrl: task $taskId not found');
+      return;
+    }
+
+    final urlChanged =
+        !_isLikelySameMedia(existing.url, newUrl) ||
+        existing.url != newUrl;
+    final tokenChanged = existing.url != newUrl;
+
+    existing.url = newUrl;
+    if (headers != null && headers.isNotEmpty) {
+      existing.headers = Map<String, String>.from(headers);
+    }
+    if (contentType != null && contentType.isNotEmpty) {
+      // contentType is retained or updated if applicable
+    }
+
+    if (tokenChanged) {
+      existing.downloadedBytes = 0;
+      existing.completedParts = 0;
+      if (wipeOnUrlChange) {
+        await _wipeTaskTemp(existing);
+      }
+    }
+
+    existing.failureReason = null;
+    existing.errorMessage = null;
+    existing.statusMessage = null;
+
+    if (existing.state == DownloadState.failed ||
+        existing.state == DownloadState.paused ||
+        existing.state == DownloadState.completed) {
+      existing.state = DownloadState.idle;
+    }
+
+    if (taskId == resniffPendingTaskId ||
+        taskId == _activeResniffSession?.taskId) {
+      clearResniffSession();
+    }
+
+    await prepareBrowserContext(existing);
+
+    debugPrint(
+      'updateTaskUrl: updated task $taskId from resniff '
+      '(urlChanged=$urlChanged, tokenChanged=$tokenChanged, autoResume=$autoResume)',
+    );
+
+    _emitTask(existing);
+
+    if (autoResume) {
+      await resumeTaskAsync(taskId);
+    }
   }
 
   Future<void> _wipeTaskTemp(DownloadTask task) async {
@@ -1039,8 +1303,102 @@ class DownloadQueue {
     _ensureSplitter(task);
   }
 
+  /// Calculates adaptive chunk count based on the retry attempt index.
+  ///
+  /// - Attempt 0: full configured chunk count (e.g. 8)
+  /// - Attempt 1 (1st retry): reasonably reduced chunks (e.g. 4)
+  /// - Attempt 2 (2nd retry): further reduced chunks (e.g. 2)
+  /// - Attempt >= 3 (3rd retry): fallback to 1 chunk (single-thread streaming)
+  static int getEffectiveChunksForAttempt(int attempt, int baseChunks) {
+    if (baseChunks <= 1) return 1;
+    if (attempt <= 0) return baseChunks;
+    if (attempt == 1) return math.max(2, (baseChunks / 2).ceil());
+    if (attempt == 2) return math.max(2, (baseChunks / 4).ceil());
+    return 1; // attempt >= 3: switch to 1 chunk
+  }
+
+  /// True when auto-retry would delete progress, hammer a dead swarm, or
+  /// cannot recover (storage / missing native engine).
+  @visibleForTesting
+  static bool shouldSkipAutoRetry(
+    DownloadTask task, {
+    required int minBytesBeforeFullRetry,
+  }) {
+    final reason = task.failureReason;
+    if (reason == DownloadFailure.diskFull ||
+        reason == DownloadFailure.permissionDenied ||
+        reason == DownloadFailure.nativeEngineUnavailable ||
+        reason == DownloadFailure.torrentMetadataFailed ||
+        reason == DownloadFailure.torrentEngineError ||
+        reason == DownloadFailure.hlsCircuitBreaker ||
+        // An expired HLS link cannot be fixed by queue-level retries — token
+        // refresh already ran inside the downloader (Pro) and failed, and
+        // free users hit the Pro gate. Retrying only re-fails and floods
+        // analytics (36 events for one user observed in BQ). Manual Refresh
+        // or re-sniff is the only path forward.
+        reason == DownloadFailure.hlsTokenExpired ||
+        // A site with a broken certificate will fail identically on every
+        // retry — skip the retry loop.
+        reason == DownloadFailure.certificateInvalid) {
+      return true;
+    }
+    if (task.url.startsWith('magnet:') ||
+        task.url.toLowerCase().endsWith('.torrent')) {
+      return true;
+    }
+    final salvageable =
+        reason == DownloadFailure.partialDownload ||
+        reason == DownloadFailure.chunkIncomplete ||
+        reason == DownloadFailure.speedStall;
+    return salvageable && task.downloadedBytes >= minBytesBeforeFullRetry;
+  }
+
+  /// Marks whether this failed emission is the last one we will auto-retry.
+  /// Analytics must only count [DownloadTask.failureIsTerminal] as
+  /// `download_failed` — in-flight retries used to inflate that event.
+  void _classifyFailureForAnalytics(DownloadTask task) {
+    task.analyticsRetryAttempts = _autoRetryAttempts[task.id] ?? 0;
+    if (task.isBackupImport || !autoRetry) {
+      task.failureIsTerminal = true;
+      return;
+    }
+    if (shouldSkipAutoRetry(
+      task,
+      minBytesBeforeFullRetry: minBytesBeforeFullRetry,
+    )) {
+      task.failureIsTerminal = true;
+      return;
+    }
+    final attempts = _autoRetryAttempts[task.id] ?? 0;
+    task.failureIsTerminal = attempts >= retryLimit;
+  }
+
   void _ensureSplitter(DownloadTask task) {
-    if (_splitters.containsKey(task.id)) return;
+    final effectiveChunks = getEffectiveChunksForAttempt(
+      _autoRetryAttempts[task.id] ?? 0,
+      numChunksPerTask,
+    );
+
+    final existing = _splitters[task.id];
+    if (existing != null) {
+      if (existing is DownloadSplitter &&
+          existing.numChunks != effectiveChunks) {
+        // Chunk count changed due to auto-retry backoff / 1-chunk fallback.
+        // Replace with new splitter configured for the reduced chunk count.
+        _splitters.remove(task.id);
+        _downloaderSubscriptions.remove(task.id)?.cancel();
+        unawaited(existing.dispose());
+      } else if (existing is HlsDownloader &&
+          existing.maxConcurrentSegments !=
+              math.min(effectiveChunks, hlsSegmentCap)) {
+        _splitters.remove(task.id);
+        _downloaderSubscriptions.remove(task.id)?.cancel();
+        unawaited(existing.dispose());
+      } else {
+        return;
+      }
+    }
+
     if (task.state == DownloadState.completed) return;
     if (task.state == DownloadState.paused) return; // defer until resumed
     if (task.url.startsWith('blob:')) return;
@@ -1056,7 +1414,7 @@ class DownloadQueue {
       downloader = HlsDownloader(
         task: task,
         client: _client,
-        maxConcurrentSegments: math.min(numChunksPerTask, hlsSegmentCap),
+        maxConcurrentSegments: math.min(effectiveChunks, hlsSegmentCap),
         remuxTsToMp4: remuxTsToMp4,
         speedLimiter: speedLimiter,
       );
@@ -1064,7 +1422,7 @@ class DownloadQueue {
       downloader = DownloadSplitter(
         task: task,
         client: _client,
-        numChunks: numChunksPerTask,
+        numChunks: effectiveChunks,
         minSpeedBytesPerSec: minSpeedThresholdBytesPerSec,
         stallTimeoutSeconds: stallTimeoutSeconds,
         partialDownloadThreshold: partialDownloadThreshold,
@@ -1079,6 +1437,9 @@ class DownloadQueue {
   }
 
   Future<void> _onDownloaderTaskUpdated(DownloadTask updatedTask) async {
+    if (updatedTask.state == DownloadState.failed) {
+      _classifyFailureForAnalytics(updatedTask);
+    }
     _emitTask(updatedTask);
     if (updatedTask.state != DownloadState.completed &&
         updatedTask.state != DownloadState.failed) {
@@ -1120,27 +1481,32 @@ class DownloadQueue {
         'Download failed: ${updatedTask.savePath.split("/").last}. Error: ${updatedTask.errorMessage}',
       );
       if (autoRetry && !updatedTask.isBackupImport) {
-        final isStallOrTruncation =
-            updatedTask.failureReason == DownloadFailure.speedStall ||
-            updatedTask.failureReason == DownloadFailure.partialDownload ||
-            updatedTask.failureReason == DownloadFailure.chunkIncomplete;
-        final alreadyDownloadedEnough =
-            updatedTask.downloadedBytes >= minBytesBeforeFullRetry;
-        if (isStallOrTruncation && alreadyDownloadedEnough) {
-          debugPrint(
-            'Skipped auto-retry for '
-            '${updatedTask.savePath.split("/").last}: '
-            'already downloaded '
-            '${(updatedTask.downloadedBytes / 1024 / 1024).toStringAsFixed(1)} MB. '
-            'User can use Force Merge or manual retry.',
-          );
-          final alreadyMb = (updatedTask.downloadedBytes / 1024 / 1024)
-              .toStringAsFixed(1);
-          updatedTask.failureReason = DownloadFailure.partialDownload;
-          updatedTask.errorMessage =
-              'Download stalled at $alreadyMb MB. '
-              'Try Force Merge to save what\'s downloaded, or tap Retry.';
-          _emitTask(updatedTask);
+        if (updatedTask.failureIsTerminal &&
+            shouldSkipAutoRetry(
+              updatedTask,
+              minBytesBeforeFullRetry: minBytesBeforeFullRetry,
+            )) {
+          final salvageable =
+              updatedTask.failureReason == DownloadFailure.partialDownload ||
+              updatedTask.failureReason == DownloadFailure.chunkIncomplete ||
+              updatedTask.failureReason == DownloadFailure.speedStall;
+          if (salvageable &&
+              updatedTask.downloadedBytes >= minBytesBeforeFullRetry) {
+            debugPrint(
+              'Skipped auto-retry for '
+              '${updatedTask.savePath.split("/").last}: '
+              'already downloaded '
+              '${(updatedTask.downloadedBytes / 1024 / 1024).toStringAsFixed(1)} MB. '
+              'User can use Force Merge or manual retry.',
+            );
+            final alreadyMb = (updatedTask.downloadedBytes / 1024 / 1024)
+                .toStringAsFixed(1);
+            updatedTask.failureReason = DownloadFailure.partialDownload;
+            updatedTask.errorMessage =
+                'Download stalled at $alreadyMb MB. '
+                'Try Force Merge to save what\'s downloaded, or tap Retry.';
+            _emitTask(updatedTask);
+          }
           return;
         }
         final attempts = _autoRetryAttempts[updatedTask.id] ?? 0;
@@ -1149,8 +1515,15 @@ class DownloadQueue {
           _autoRetryAttempts[updatedTask.id] = nextAttempt;
           final originalError = updatedTask.errorMessage ?? 'Unknown error';
           final limitStr = '$retryLimit';
+          final nextChunks = getEffectiveChunksForAttempt(
+            nextAttempt,
+            numChunksPerTask,
+          );
+          final chunkMsg = nextChunks == 1
+              ? ' (switching to 1 chunk / single thread)'
+              : ' (reducing to $nextChunks chunks)';
           updatedTask.errorMessage =
-              'Retrying in 1s (attempt $nextAttempt/$limitStr). $originalError';
+              'Retrying in 1s (attempt $nextAttempt/$limitStr$chunkMsg). $originalError';
           _emitTask(updatedTask);
 
           Future.delayed(const Duration(seconds: 1), () {
@@ -1168,12 +1541,19 @@ class DownloadQueue {
           );
           final originalError = updatedTask.errorMessage ?? 'Unknown error';
           final cleanError = originalError.replaceFirst(
-            RegExp(r'^Retrying in [12]s \(attempt \d+/(?:\d+|∞)\)\. '),
+            RegExp(r'^Retrying in [12]s \(attempt \d+/(?:\d+|∞)(?:[^)]*)\)\. '),
             '',
           );
+          final diagnosticMsg = updatedTask.lastResniffResult != null &&
+                  !updatedTask.lastResniffResult!.isSuccess
+              ? updatedTask.lastResniffResult!.userFacingMessage
+              : cleanError;
           updatedTask.errorMessage =
-              'Auto-retry exhausted after $retryLimit attempts. $cleanError';
+              'Auto-retry exhausted after $retryLimit attempts. $diagnosticMsg';
           _emitTask(updatedTask);
+          if (!_resniffSuggestedController.isClosed) {
+            _resniffSuggestedController.add(updatedTask.id);
+          }
         }
       }
     }
@@ -1340,6 +1720,10 @@ class DownloadQueue {
       await _preserveCorruptQueueFile(file, e.toString());
     } finally {
       _isLoading = false;
+      // Enforce the history cap immediately on restore — the queue file may
+      // hold more terminal rows than maxCompletedTasks, and _emitTask-based
+      // eviction never runs during loadFromFile.
+      _evictOldCompletedTasks();
       // Tasks are already in _executionQueue as idle. Hold multi-connection
       // resume for a few seconds so browser/WebView cold start can finish.
       // Without this, Secure Folder freezes ~10–15s under HLS+GPU load.
@@ -1538,9 +1922,13 @@ class DownloadQueue {
       final uri = Uri.parse(url);
       final params = Map<String, List<String>>.from(uri.queryParametersAll);
       params.removeWhere((k, _) => trackingParams.contains(k.toLowerCase()));
-      return uri
-          .replace(queryParameters: params.isEmpty ? null : params)
-          .toString();
+      if (params.isEmpty) {
+        return uri.replace(query: '').toString();
+      }
+      return uri.replace(queryParameters: {
+        for (final entry in params.entries)
+          entry.key: entry.value.length == 1 ? entry.value.first : entry.value,
+      }).toString();
     } catch (_) {
       return url;
     }
@@ -1944,8 +2332,11 @@ class DownloadQueue {
         continue;
       }
       final task = _tasks[id];
-      // Best-effort: free temp workspace when dropping a failed history row.
-      if (task != null && task.state == DownloadState.failed) {
+      // Best-effort: free temp workspace when dropping a history row.
+      // Completed tasks are evicted too — they are published (private copy
+      // already deleted), so the leftover temp/part-tree is pure garbage
+      // (HLS segment_*.ts trees can be GBs and were never cleaned up).
+      if (task != null) {
         unawaited(() async {
           try {
             final tempDir = Directory(task.tempDir);
@@ -2046,6 +2437,9 @@ class DownloadQueue {
     }
     if (!_warningController.isClosed) {
       await _warningController.close();
+    }
+    if (!_resniffSuggestedController.isClosed) {
+      await _resniffSuggestedController.close();
     }
     if (_ownsClient) {
       _client.close();

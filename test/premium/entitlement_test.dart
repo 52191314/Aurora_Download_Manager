@@ -35,49 +35,6 @@ void main() {
     });
   });
 
-  group('freshInstallTier (OSS release default)', () {
-    test('github release build defaults to ultra (fully unlocked edition)',
-        () {
-      expect(
-        ProEntitlement.freshInstallTier(
-          EntitlementTier.free,
-          releaseMode: true,
-          githubChannel: true,
-        ),
-        EntitlementTier.ultra,
-      );
-    });
-
-    test('play release build keeps purchase-derived tier', () {
-      expect(
-        ProEntitlement.freshInstallTier(
-          EntitlementTier.free,
-          releaseMode: true,
-          githubChannel: false,
-        ),
-        EntitlementTier.free,
-      );
-      expect(
-        ProEntitlement.freshInstallTier(
-          EntitlementTier.ultra,
-          releaseMode: true,
-          githubChannel: false,
-        ),
-        EntitlementTier.ultra,
-      );
-    });
-
-    test('debug/profile github build keeps purchase-derived tier', () {
-      expect(
-        ProEntitlement.freshInstallTier(
-          EntitlementTier.free,
-          releaseMode: false,
-          githubChannel: true,
-        ),
-        EntitlementTier.free,
-      );
-    });
-  });
 
   group('ProFeatures.allows matrix', () {
     test('every feature allows at or above its minimum tier', () {
@@ -103,6 +60,7 @@ void main() {
         ProFeature.autoHostGroups,
         ProFeature.customFilterListUrl,
         ProFeature.downloadRules,
+        ProFeature.driveSync,
         ProFeature.extraFilterLists,
         ProFeature.higherConcurrency,
         ProFeature.higherChunks,

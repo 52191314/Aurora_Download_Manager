@@ -40,7 +40,17 @@ class DownloadErrorClassifier {
     }
 
     // ── TLS / Handshake errors ──
+    //
+    // Certificate failures mean the SITE is misconfigured (self-signed,
+    // expired, untrusted chain) — retrying cannot help. Generic handshake
+    // errors are usually network-path related and stay connectionReset.
     if (error is HandshakeException || error is TlsException) {
+      final msg = error.toString().toLowerCase();
+      if (msg.contains('certificate') ||
+          msg.contains('self-signed') ||
+          msg.contains('cert verify')) {
+        return DownloadFailure.certificateInvalid;
+      }
       return DownloadFailure.connectionReset;
     }
 
@@ -119,6 +129,12 @@ class DownloadErrorClassifier {
         return 'Couldn\'t keep the connection open. '
             'A network device or the server reset the link. '
             'Try again to resume.';
+      case DownloadFailure.certificateInvalid:
+        final h = host ?? _extractHost(detail);
+        return 'This site\'s security certificate is invalid or self-signed'
+            '${h != null ? ' ($h)' : ''}. '
+            'Nothing is wrong with your device or network — downloads from '
+            'this site cannot be verified. Try another source.';
 
       // ── HTTP ──
       case DownloadFailure.httpUnauthorized:
@@ -158,6 +174,9 @@ class DownloadErrorClassifier {
         return detail ?? 'Couldn\'t download. '
             'The URL is not valid or isn\'t supported. '
             'Check the link and try again.';
+      case DownloadFailure.appLinkIntent:
+        return 'This is an Android app link (intent://), not a file. '
+            'Open it in the browser so Android can hand it to the right app.';
       case DownloadFailure.contentMismatch:
         return 'Couldn\'t download. '
             'The server sent an HTML page instead of a media file. '
@@ -452,6 +471,11 @@ class DownloadErrorClassifier {
     }
 
     // Network (from message text).
+    if (lower.contains('certificate') ||
+        lower.contains('self-signed') ||
+        lower.contains('cert verify')) {
+      return DownloadFailure.certificateInvalid;
+    }
     if (lower.contains('failed host lookup') || lower.contains('dns')) {
       return DownloadFailure.dnsLookupFailed;
     }

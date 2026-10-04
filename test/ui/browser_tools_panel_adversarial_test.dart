@@ -74,18 +74,9 @@ void main() {
       );
 
       await tester.tap(find.text('Open Duplicates'));
-      // Expecting exception during pump because keys are 'tools_Duplicate Tool' for both items
-      dynamic thrownException;
-      try {
-        await tester.pumpAndSettle();
-      } catch (e) {
-        thrownException = e;
-      }
-
-      final errorDetails = tester.takeException();
-      final hasCollisionError = thrownException != null || errorDetails != null;
-      // Documenting whether duplicate key exception occurred
-      expect(hasCollisionError, isTrue, reason: 'Duplicate entry labels cause ValueKey collision in ReorderableListView');
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Duplicate Tool'), findsWidgets);
     });
 
     // ----------------------------------------------------
@@ -232,7 +223,7 @@ void main() {
 
       expect(find.text('Tool Item #0'), findsOneWidget);
 
-      final listFinder = find.byType(ReorderableListView);
+      final listFinder = find.byType(ListView);
       expect(listFinder, findsOneWidget);
 
       // Drag down to reveal item #50
@@ -285,16 +276,8 @@ void main() {
       await tester.tap(find.text('Open Toggle'));
       await tester.pumpAndSettle();
 
-      for (int i = 0; i < 50; i++) {
-        if (i % 2 == 0) {
-          await tester.tap(find.text('Tools'));
-        } else {
-          await tester.tap(find.text('Settings'));
-        }
-        await tester.pump(const Duration(milliseconds: 10));
-      }
-      await tester.pumpAndSettle();
-
+      expect(find.text('Tool 1'), findsOneWidget);
+      expect(find.text('Setting 1'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -365,7 +348,7 @@ void main() {
       await tester.tap(find.text('Open Reorder Null'));
       await tester.pumpAndSettle();
 
-      final item1Finder = find.byKey(const ValueKey('tools_Item 1'));
+      final item1Finder = find.byKey(const ValueKey('row_0_Item 1'));
       final center = tester.getCenter(item1Finder);
 
       final gesture = await tester.startGesture(center);
@@ -376,6 +359,103 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
+    });
+
+    // ----------------------------------------------------
+    // ADV-8: Merged Single List with Tools, Divider, and Settings
+    // ----------------------------------------------------
+    testWidgets('ADV-8: Merged modal renders tools, divider, and settings (Backup, Pro, Vault)', (tester) async {
+      setSurfaceSize(tester, const Size(1080, 2400));
+
+      bool backupTapped = false;
+      bool proTapped = false;
+
+      final tools = [
+        OverflowMenuEntry(icon: Icons.history, label: 'History', onTap: () {}),
+        OverflowMenuEntry(icon: Icons.download, label: 'Downloads', onTap: () {}),
+        const OverflowMenuEntry.divider(),
+        OverflowMenuEntry(icon: Icons.security, label: 'Stealth on', onTap: () {}),
+      ];
+
+      final settings = [
+        const OverflowMenuEntry.header('Settings'),
+        OverflowMenuEntry(icon: Icons.tune, label: 'Download Defaults', onTap: () {}),
+        OverflowMenuEntry(icon: Icons.backup, label: 'Backup', onTap: () => backupTapped = true),
+        OverflowMenuEntry(
+          icon: Icons.auto_awesome,
+          label: 'Aurora Pro & Ultra',
+          badge: 'PRO',
+          onTap: () => proTapped = true,
+        ),
+        OverflowMenuEntry(icon: Icons.shield, label: 'Private Vault', badge: 'PRO', onTap: () {}),
+        OverflowMenuEntry(icon: Icons.cloud_sync, label: 'WebDAV Backup', badge: 'PRO', onTap: () {}),
+        OverflowMenuEntry(icon: Icons.rss_feed, label: 'Aurora Watcher', badge: 'PRO', onTap: () {}),
+        OverflowMenuEntry(icon: Icons.api, label: 'Automation API', badge: 'PRO', onTap: () {}),
+      ];
+
+      await tester.pumpWidget(
+        buildTestableWidget(
+          Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                showBrowserOverflowPopup(
+                  context,
+                  pageTitle: 'Unified Test',
+                  pageUrl: 'https://example.com',
+                  toolEntries: tools,
+                  settingsEntries: settings,
+                );
+              },
+              child: const Text('Open Unified'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Unified'));
+      await tester.pumpAndSettle();
+
+      // Verify tools rendered first
+      expect(find.text('History'), findsOneWidget);
+      expect(find.text('Downloads'), findsOneWidget);
+
+      final listFinder = find.byType(ListView);
+
+      // Verify settings header and items
+      await tester.dragUntilVisible(
+        find.text('SETTINGS'),
+        listFinder,
+        const Offset(0, -100),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('SETTINGS'), findsOneWidget);
+
+      // Verify Backup is present and tap works
+      await tester.dragUntilVisible(
+        find.text('Backup'),
+        listFinder,
+        const Offset(0, -100),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Backup'), findsOneWidget);
+      await tester.tap(find.text('Backup'));
+      await tester.pumpAndSettle();
+      expect(backupTapped, isTrue);
+
+      // Re-open and verify Pro & Ultra with PRO badge
+      await tester.tap(find.text('Open Unified'));
+      await tester.pumpAndSettle();
+
+      await tester.dragUntilVisible(
+        find.text('Aurora Pro & Ultra'),
+        listFinder,
+        const Offset(0, -150),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Aurora Pro & Ultra'), findsOneWidget);
+      await tester.tap(find.text('Aurora Pro & Ultra'));
+      await tester.pumpAndSettle();
+      expect(proTapped, isTrue);
     });
   });
 }

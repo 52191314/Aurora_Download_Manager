@@ -12,19 +12,14 @@ import 'models/sniffed_media.dart';
 /// [MediaSnifferEngine]. Encapsulates the dedup sets, eviction timers, the
 /// "suppressed" counters, and the JSON on-disk save/load format.
 ///
-/// The cross-tab global dedup set remains a static so that URL hits
-/// detected by one tab suppress duplicates in all other tabs. The
-/// per-engine set, list, and timers are instance state.
+/// Dedup sets, detected media lists, and eviction timers are strictly scoped
+/// to each [SniffedMediaCache] instance so that browsing in one tab never
+/// suppresses media detection in other tabs.
 class SniffedMediaCache {
   late final List<SniffedMedia> detectedMedia;
   List<SniffedMedia>? _cachedUnmodifiable;
   final Set<String> urlCache = {};
   final Map<String, Timer> evictionTimers = {};
-
-  /// Global cross-tab dedup cache. Static so that all
-  /// [MediaSnifferEngine] instances share a single view of which URLs
-  /// have already been captured in this session.
-  static final Set<String> _globalUrlCache = {};
 
   /// Stream controller for media-list mutations (additions, enrichment
   /// updates, evictions). Backed by the engine's
@@ -84,9 +79,13 @@ class SniffedMediaCache {
       final uri = Uri.parse(url);
       final params = Map<String, List<String>>.from(uri.queryParametersAll);
       params.removeWhere((k, _) => _trackingParams.contains(k.toLowerCase()));
-      return uri
-          .replace(queryParameters: params.isEmpty ? null : params)
-          .toString();
+      if (params.isEmpty) {
+        return uri.replace(query: '').toString();
+      }
+      return uri.replace(queryParameters: {
+        for (final entry in params.entries)
+          entry.key: entry.value.length == 1 ? entry.value.first : entry.value,
+      }).toString();
     } catch (_) {
       return url;
     }
@@ -111,21 +110,19 @@ class SniffedMediaCache {
   // ---------------------------------------------------------------------------
 
   /// Register [normalizedUrl] as newly detected. If the URL is already in
-  /// the per-engine or the global dedup cache, returns `false` and does
-  /// nothing. Otherwise inserts it and schedules an eviction timer with
-  /// [ttl]; the entry will be removed from both caches after the timer
-  /// fires (unless the engine is disposed first).
+  /// this cache's dedup set, returns `false` and does nothing.
+  /// Otherwise inserts it and schedules an eviction timer with [ttl]; the
+  /// entry will be removed from [urlCache] after the timer fires (unless
+  /// the cache is cleared or disposed first).
   bool registerUrl(String normalizedUrl, Duration ttl) {
+    if (_isDisposed) return false;
     if (urlCache.contains(normalizedUrl)) return false;
-    if (_globalUrlCache.contains(normalizedUrl)) return false;
     urlCache.add(normalizedUrl);
-    _globalUrlCache.add(normalizedUrl);
 
     evictionTimers[normalizedUrl]?.cancel();
     evictionTimers[normalizedUrl] = Timer(ttl, () {
       if (_isDisposed) return;
       urlCache.remove(normalizedUrl);
-      _globalUrlCache.remove(normalizedUrl);
       evictionTimers.remove(normalizedUrl);
     });
     return true;
@@ -174,7 +171,7 @@ class SniffedMediaCache {
       detectedMedia.remove(item);
       final norm = normalizeUrl(item.url);
       urlCache.remove(norm);
-      _globalUrlCache.remove(norm);
+      evictionTimers.remove(norm)?.cancel();
     }
     if (!_isDisposed && detectedMedia.isNotEmpty) {
       mediaChangedController.add(detectedMedia.last);
@@ -195,11 +192,6 @@ class SniffedMediaCache {
       timer.cancel();
     }
     evictionTimers.clear();
-    // Evict this engine's URLs from the global cross-tab dedup cache so the
-    // same URLs can be re-detected after the user clears captured media.
-    for (final url in urlCache) {
-      _globalUrlCache.remove(url);
-    }
     urlCache.clear();
     detectedMedia.clear();
     suppressedMediaCount = 0;
@@ -207,14 +199,12 @@ class SniffedMediaCache {
     debugPrint('SniffedMediaCache cleared ($itemCount items removed)');
   }
 
-  /// Clears the global cross-tab dedup cache so the same URL can be
-  /// re-detected across tabs. Call this when the user explicitly clears
-  /// captured media.
-  static void clearGlobal() {
-    _globalUrlCache.clear();
-  }
+  /// Deprecated: Global cross-tab dedup cache removed in favor of strict
+  /// per-tab isolation. Retained as a no-op for compatibility.
+  @Deprecated('Global cross-tab dedup has been removed for tab isolation')
+  static void clearGlobal() {}
 
-  /// Clears the per-engine and global dedup caches without removing any
+  /// Clears the dedup cache and active eviction timers without removing any
   /// detected media items. Used by the manual rescan button so re-captured
   /// DOM-scan URLs are not silently dropped by the dedup check while
   /// keeping the existing enriched items intact.
@@ -223,9 +213,6 @@ class SniffedMediaCache {
       timer.cancel();
     }
     evictionTimers.clear();
-    for (final url in urlCache) {
-      _globalUrlCache.remove(url);
-    }
     urlCache.clear();
   }
 
@@ -332,7 +319,7 @@ class SniffedMediaCache {
       if (blocked) {
         final norm = normalizeUrl(media.url);
         urlCache.remove(norm);
-        _globalUrlCache.remove(norm);
+        evictionTimers.remove(norm)?.cancel();
       }
       return blocked;
     });
@@ -432,6 +419,8 @@ class SniffedMediaCache {
       timer.cancel();
     }
     evictionTimers.clear();
+    urlCache.clear();
+    detectedMedia.clear();
   }
 }
 

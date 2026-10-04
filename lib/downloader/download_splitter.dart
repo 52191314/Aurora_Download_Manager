@@ -12,6 +12,7 @@ import 'file_combiner.dart';
 import '../platform/ts_remux_service.dart';
 import '../platform/native_download_client.dart';
 import 'speed_limiter.dart';
+import '../sniffer/resniff_result.dart';
 
 void _logError(String context, Object error, [StackTrace? stack]) {
   final message = '[DownloadSplitter] $context: $error';
@@ -23,6 +24,54 @@ class DownloadSplitter implements BaseDownloader {
   static const Duration defaultProbeTimeout = Duration(seconds: 12);
   static const Duration defaultResponseTimeout = Duration(seconds: 20);
   static const Duration defaultBodyIdleTimeout = Duration(seconds: 15);
+
+  static const _defaultUserAgent =
+      'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+
+  Map<String, String> _buildRequestHeaders(Uri uri) {
+    final origin = '${uri.scheme}://${uri.host}';
+    final h = <String, String>{
+      'User-Agent': _defaultUserAgent,
+      'Referer': '$origin/',
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Origin': origin,
+      'Accept-Encoding': 'identity',
+    };
+    if (task.headers != null && task.headers!.isNotEmpty) {
+      h.addAll(task.headers!);
+      if (!h.containsKey('Referer') && !h.containsKey('referer')) {
+        h['Referer'] = '$origin/';
+      }
+      if (!h.containsKey('Origin') && !h.containsKey('origin')) {
+        h['Origin'] = origin;
+      }
+    }
+    return h;
+  }
+
+  /// Live WebView cookies when available, else the Cookie captured at enqueue.
+  Future<String?> _cookieHeaderFor(String url) async {
+    Map<String, String>? live;
+    if (task.cookieProvider != null) {
+      try {
+        live = await task.cookieProvider!(url);
+      } catch (_) {}
+    }
+    return NativeDownloadClient.cookieHeaderFrom(
+      headers: task.headers,
+      providerCookies: live,
+    );
+  }
+
+  Future<Map<String, String>> _headersFor(Uri uri) async {
+    final h = _buildRequestHeaders(uri);
+    final cookie = await _cookieHeaderFor(uri.toString());
+    if (cookie != null && cookie.isNotEmpty) {
+      h['Cookie'] = cookie;
+    }
+    return h;
+  }
 
   final DownloadTask task;
   final http.Client client;
@@ -172,9 +221,12 @@ class DownloadSplitter implements BaseDownloader {
     String? etag;
     String? lastModified;
 
+    final probeUri = Uri.parse(task.url);
+    final probeHeaders = await _headersFor(probeUri);
+
     try {
       final headResponse = await client
-          .head(Uri.parse(task.url), headers: task.headers)
+          .head(probeUri, headers: probeHeaders)
           .timeout(probeTimeout);
       final contentLengthHeader =
           headResponse.headers['content-length'] ??
@@ -210,10 +262,8 @@ class DownloadSplitter implements BaseDownloader {
     }
 
     if (totalBytes <= 0 || !supportsRanges) {
-      final getRequest = http.Request('GET', Uri.parse(task.url));
-      if (task.headers != null) {
-        getRequest.headers.addAll(task.headers!);
-      }
+      final getRequest = http.Request('GET', probeUri);
+      getRequest.headers.addAll(probeHeaders);
       getRequest.headers['Range'] = 'bytes=0-0';
 
       try {
@@ -303,9 +353,12 @@ class DownloadSplitter implements BaseDownloader {
     String? currentLastModified;
     int currentTotalBytes = -1;
 
+    final probeUri = Uri.parse(task.url);
+    final probeHeaders = await _headersFor(probeUri);
+
     try {
       final headResponse = await client
-          .head(Uri.parse(task.url), headers: task.headers)
+          .head(probeUri, headers: probeHeaders)
           .timeout(probeTimeout);
       if (headResponse.statusCode == 200) {
         currentEtag =
@@ -331,10 +384,8 @@ class DownloadSplitter implements BaseDownloader {
     // If HEAD failed to give us etag (server blocks HEAD), try a GET
     // bytes=0-0 probe.
     if (currentEtag == null && currentTotalBytes <= 0) {
-      final getRequest = http.Request('GET', Uri.parse(task.url));
-      if (task.headers != null) {
-        getRequest.headers.addAll(task.headers!);
-      }
+      final getRequest = http.Request('GET', probeUri);
+      getRequest.headers.addAll(probeHeaders);
       getRequest.headers['Range'] = 'bytes=0-0';
       try {
         final getResponse = await client.send(getRequest).timeout(probeTimeout);
@@ -482,22 +533,57 @@ class DownloadSplitter implements BaseDownloader {
         final metaLoaded = await _loadMeta();
 
         if (metaLoaded) {
-          // Do not re-estimate an existing task. The persisted/sniffed size is
-          // retained; the actual response remains authoritative at merge.
-          if (!task.sizeProbeAttempted) {
+          // If the task was reconfigured with a different chunk count (e.g.
+          // auto-retry fallback to fewer chunks or 1 single thread), discard
+          // the incompatible partial chunks and rebuild with the new chunk count.
+          if (task.chunks.length != numChunks && numChunks > 0) {
+            debugPrint(
+              '[DownloadSplitter] Chunk count changed from '
+              '${task.chunks.length} to $numChunks for ${task.savePath.split("/").last}. '
+              'Resetting chunks for adaptive retry.',
+            );
+            for (final chunk in task.chunks) {
+              final f = File('${task.tempDir}/part_${chunk.index}');
+              if (await f.exists()) {
+                try {
+                  await f.delete();
+                } catch (_) {}
+              }
+            }
+            if (numChunks > 1 && task.totalBytes > 0) {
+              task.chunks = HttpRangeCalculator.calculate(
+                contentLength: task.totalBytes,
+                maxChunks: numChunks,
+              );
+            } else {
+              task.chunks = [
+                DownloadChunk(
+                  index: 0,
+                  start: 0,
+                  end: task.totalBytes > 0 ? task.totalBytes - 1 : -1,
+                ),
+              ];
+            }
+            task.downloadedBytes = 0;
+          } else if (!task.sizeProbeAttempted) {
             await _revalidateOnResume();
           }
         } else {
           if (task.sizeProbeAttempted) {
-            // The sniffer supplied a size. Initialize one conservative chunk
-            // without issuing a preflight request.
-            task.chunks = [
-              DownloadChunk(
-                index: 0,
-                start: 0,
-                end: task.totalBytes > 0 ? task.totalBytes - 1 : -1,
-              ),
-            ];
+            if (numChunks > 1 && task.totalBytes > 0) {
+              task.chunks = HttpRangeCalculator.calculate(
+                contentLength: task.totalBytes,
+                maxChunks: numChunks,
+              );
+            } else {
+              task.chunks = [
+                DownloadChunk(
+                  index: 0,
+                  start: 0,
+                  end: task.totalBytes > 0 ? task.totalBytes - 1 : -1,
+                ),
+              ];
+            }
           } else {
             await _probeServerAndInit();
           }
@@ -822,7 +908,11 @@ class DownloadSplitter implements BaseDownloader {
         task.state = DownloadState.failed;
         final classified = DownloadErrorClassifier.classifyAndMessage(e);
         task.failureReason = classified.reason;
-        task.errorMessage = classified.message;
+        if (task.lastResniffResult != null && !task.lastResniffResult!.isSuccess) {
+          task.errorMessage = task.lastResniffResult!.userFacingMessage;
+        } else {
+          task.errorMessage = classified.message;
+        }
         _emitTask();
         rethrow;
       } finally {
@@ -917,6 +1007,9 @@ class DownloadSplitter implements BaseDownloader {
       diskBytes = 0;
     }
 
+    final chunkUri = Uri.parse(task.url);
+    final chunkHeaders = await _headersFor(chunkUri);
+
     // 0th attempt: Native OkHttp engine with HTTP/2, connection pooling,
     // and direct-to-disk streaming.  Avoids the HTTP/1.1 and base64
     // overhead of the Dart HTTP path, and uses a native TLS fingerprint
@@ -942,7 +1035,11 @@ class DownloadSplitter implements BaseDownloader {
             filePath: chunkPath,
             rangeStart: rangeStart,
             rangeEnd: rangeEnd,
-            headers: task.headers,
+            headers: chunkHeaders,
+            cookieHeader: NativeDownloadClient.headerValue(
+              chunkHeaders,
+              'Cookie',
+            ),
             downloadId: downloadId,
           )
           .then((r) {
@@ -959,30 +1056,34 @@ class DownloadSplitter implements BaseDownloader {
       // timer so every speed tick also advances the progress bar (a 500ms
       // poll made native downloads look 2 fps and the 250ms speed calc
       // report 0 KB/s on every other tick).
-      final progressTimer = Timer.periodic(const Duration(milliseconds: 250), (
+      const nativePoll = Duration(milliseconds: 250);
+      final nativePollSeconds = nativePoll.inMilliseconds / 1000.0;
+      final progressTimer = Timer.periodic(nativePoll, (
         _,
       ) async {
         try {
+          var actualBytes = lastNativeBytes;
           if (await chunkFile.exists()) {
-            final actualBytes = await chunkFile.length();
+            actualBytes = await chunkFile.length();
             if (actualBytes > chunk.bytesDownloaded) {
               chunk.bytesDownloaded = actualBytes;
               _progressDirty = true;
             }
-            // Watchdog: abort a native download that makes no forward
-            // progress for stallTimeoutSeconds so we fall through to the
-            // Dart HTTP fallback instead of hanging forever on a dead
-            // native connection.
-            if (actualBytes > lastNativeBytes) {
-              lastNativeBytes = actualBytes;
-              nativeStallSeconds = 0.0;
-            } else {
-              nativeStallSeconds += 0.5;
-              if (nativeStallSeconds >= stallTimeoutSeconds &&
-                  !nativeCompleter.isCompleted) {
-                unawaited(NativeDownloadClient.cancelChunk(downloadId));
-                nativeCompleter.complete(null);
-              }
+          }
+          // Watchdog: abort a native download that makes no forward
+          // progress for stallTimeoutSeconds so we fall through to the
+          // Dart HTTP fallback instead of hanging forever on a dead
+          // native connection. Tick even before the first byte so a
+          // hung connect cannot block _waitForChunks.
+          if (actualBytes > lastNativeBytes) {
+            lastNativeBytes = actualBytes;
+            nativeStallSeconds = 0.0;
+          } else {
+            nativeStallSeconds += nativePollSeconds;
+            if (nativeStallSeconds >= stallTimeoutSeconds &&
+                !nativeCompleter.isCompleted) {
+              unawaited(NativeDownloadClient.cancelChunk(downloadId));
+              nativeCompleter.complete(null);
             }
           }
         } catch (_) {}
@@ -1045,10 +1146,10 @@ class DownloadSplitter implements BaseDownloader {
     // 429: allow up to 3 rate-limit retries in addition to the auth retry
     for (int attempt = 0; attempt < 5; attempt++) {
       if (_isPaused || _stallDetected) return;
-      final request = http.Request('GET', Uri.parse(task.url));
-      if (task.headers != null) {
-        request.headers.addAll(task.headers!);
-      }
+      final currentChunkUri = Uri.parse(task.url);
+      final currentChunkHeaders = await _headersFor(currentChunkUri);
+      final request = http.Request('GET', currentChunkUri);
+      request.headers.addAll(currentChunkHeaders);
       if (rangeSupported) {
         request.headers['Range'] = 'bytes=$rangeStart-$rangeEnd';
       } else if (chunk.isOpenEnded && diskBytes > 0) {
@@ -1119,13 +1220,25 @@ class DownloadSplitter implements BaseDownloader {
           task.errorMessage =
               'Access token expired. Aurora is fetching a fresh one.';
           _emitTask();
-          final newUrl = await task.onTokenExpired!(forceReload: false);
-          if (newUrl == null || newUrl == task.url) {
+          final res = await task.onTokenExpired!(forceReload: false);
+          task.lastResniffResult = res;
+          if (res is ResniffSuccess) {
+            task.url = res.url;
+            if (res.headers != null && res.headers!.isNotEmpty) {
+              task.headers = {
+                ...?task.headers,
+                ...res.headers!,
+              };
+            }
+            continue;
+          } else if (res is ResniffUnchanged) {
+            response = null;
+            break;
+          } else {
+            task.errorMessage = res.userFacingMessage;
             response = null;
             break;
           }
-          task.url = newUrl;
-          continue;
         } catch (e, s) {
           _logError('Token refresh failed for direct download', e, s);
           response = null;
@@ -1136,6 +1249,11 @@ class DownloadSplitter implements BaseDownloader {
     }
 
     if (response == null) {
+      final lastRes = task.lastResniffResult;
+      if (lastRes != null && !lastRes.isSuccess) {
+        task.errorMessage = lastRes.userFacingMessage;
+        throw Exception(lastRes.userFacingMessage);
+      }
       throw Exception(
         'Download failed: server returned 403/401 and token refresh was unavailable.',
       );
@@ -1449,10 +1567,9 @@ class DownloadSplitter implements BaseDownloader {
       }
 
       // Re-open the HTTP connection with updated Range.
-      final reconnectRequest = http.Request('GET', Uri.parse(task.url));
-      if (task.headers != null) {
-        reconnectRequest.headers.addAll(task.headers!);
-      }
+      final recUri = Uri.parse(task.url);
+      final reconnectRequest = http.Request('GET', recUri);
+      reconnectRequest.headers.addAll(await _headersFor(recUri));
       if (rangeSupported) {
         currentRangeStart = chunk.start + currentDiskBytes;
         reconnectRequest.headers['Range'] =

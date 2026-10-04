@@ -1,9 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aurora_downloader/sniffer/sniffer_screen.dart';
 import 'package:aurora_downloader/sniffer/sheets/browser_overflow_popup.dart';
-import 'package:aurora_downloader/settings/download_settings.dart';
 import 'package:aurora_downloader/theme/aurora_theme.dart';
 import 'package:aurora_downloader/theme/aurora_palette.dart';
 import 'package:aurora_downloader/theme/aurora_tokens.dart';

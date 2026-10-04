@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import 'package:aurora_downloader/theme/aurora_palette.dart';
 
+import '../browser_library.dart';
+import 'double_tap_seek.dart';
 import 'engine_factory.dart';
 import 'mini_player_controller.dart';
 import 'playback_engine.dart';
@@ -142,6 +144,7 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
   // which would add ~300ms of lag to every single-tap controls toggle.
   DateTime? _lastTapAt;
   Offset? _lastTapPos;
+  final DoubleTapSeekCombo _seekCombo = DoubleTapSeekCombo();
 
   // --- Transient gesture HUD ---
   _GestureHud? _hud;
@@ -167,9 +170,26 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
     _setKeepScreenOn(true);
     _initPip();
     _seedBrightness();
+    _checkInitialFavorited();
     _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() {});
     });
+  }
+
+  Future<void> _checkInitialFavorited() async {
+    try {
+      final lib = await const BrowserLibraryStore().load();
+      if (!mounted) return;
+      final isFav = lib.videoFavorites.any(
+        (f) =>
+            f.url == _source.url ||
+            (f.sourcePageUrl != null &&
+                f.sourcePageUrl == _source.sourcePageUrl),
+      );
+      if (isFav && mounted) {
+        setState(() => _favorited = true);
+      }
+    } catch (_) {}
   }
 
   /// Start the brightness drag wherever the device already is, so the first
@@ -220,7 +240,9 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
     if (!mounted) return;
     MiniPlayerController.instance.adopt(_engine, _source);
     _ownsEngine = false;
-    Navigator.of(context).maybePop();
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -310,10 +332,11 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
     final width = context.size?.width ?? MediaQuery.sizeOf(context).width;
     final third = width / 3;
     if (localPosition.dx < third) {
-      _seekBy(const Duration(seconds: -10));
+      _seekBy(_seekCombo.tap(forward: false));
     } else if (localPosition.dx > width - third) {
-      _seekBy(const Duration(seconds: 10));
+      _seekBy(_seekCombo.tap(forward: true));
     } else {
+      _seekCombo.reset();
       state.isPlaying ? _engine.pause() : _engine.play();
       _restartAutoHide();
     }
@@ -334,7 +357,12 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
             : Icons.fast_forward_rounded,
         label: '${delta.isNegative ? '−' : '+'}${delta.inSeconds.abs()}s',
       ),
+      sticky: true,
     );
+    _hudTimer?.cancel();
+    _hudTimer = Timer(_seekCombo.window, () {
+      if (mounted) setState(() => _hud = null);
+    });
   }
 
   // --- Vertical drag: brightness (left) / volume (right) ------------------
@@ -569,18 +597,18 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
           return Stack(
             fit: StackFit.expand,
             children: [
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: _onTapUp,
-                onLongPressStart: (_) => _onHoldStart(),
-                onLongPressMoveUpdate: _onHoldMove,
-                onLongPressEnd: (_) => _onHoldEnd(),
-                onLongPressCancel: _onHoldEnd,
-                onVerticalDragStart: _onVerticalDragStart,
-                onVerticalDragUpdate: _onVerticalDragUpdate,
-                onVerticalDragEnd: (_) => _endVerticalDrag(),
-                onVerticalDragCancel: _endVerticalDrag,
-                child: Center(
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: _onTapUp,
+                  onLongPressStart: (_) => _onHoldStart(),
+                  onLongPressMoveUpdate: _onHoldMove,
+                  onLongPressEnd: (_) => _onHoldEnd(),
+                  onLongPressCancel: _onHoldEnd,
+                  onVerticalDragStart: _onVerticalDragStart,
+                  onVerticalDragUpdate: _onVerticalDragUpdate,
+                  onVerticalDragEnd: (_) => _endVerticalDrag(),
+                  onVerticalDragCancel: _endVerticalDrag,
                   child: state.canShowSurface
                       ? _engine.buildSurface(fit: _fit)
                       : const SizedBox.expand(),
@@ -621,7 +649,7 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
                       ? null
                       : () async {
                           await widget.onFavorite!(_source.url);
-                          if (mounted) setState(() => _favorited = true);
+                          await _checkInitialFavorited();
                         },
                 ),
                 _BottomBar(
@@ -639,13 +667,13 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
                   onScrubUpdate: _onScrubUpdate,
                   onScrubEnd: _onScrubEnd,
                   onCycleFit: () {
-                    setState(() {
-                      _fit = _fit == BoxFit.contain
-                          ? BoxFit.cover
-                          : _fit == BoxFit.cover
-                              ? BoxFit.fill
-                              : BoxFit.contain;
-                    });
+                    setState(() => _fit = _nextFit(_fit));
+                    _showHud(
+                      _GestureHud(
+                        icon: _fitIcon(_fit),
+                        label: _fitLabel(_fit),
+                      ),
+                    );
                     _restartAutoHide();
                   },
                   onSpeed: (v) {
@@ -665,6 +693,39 @@ class _AuroraPlayerScreenState extends State<AuroraPlayerScreen> {
         },
       ),
     );
+  }
+}
+
+BoxFit _nextFit(BoxFit current) {
+  switch (current) {
+    case BoxFit.contain:
+      return BoxFit.cover;
+    case BoxFit.cover:
+      return BoxFit.fill;
+    default:
+      return BoxFit.contain;
+  }
+}
+
+String _fitLabel(BoxFit fit) {
+  switch (fit) {
+    case BoxFit.cover:
+      return 'Crop';
+    case BoxFit.fill:
+      return 'Stretch';
+    default:
+      return 'Fit';
+  }
+}
+
+IconData _fitIcon(BoxFit fit) {
+  switch (fit) {
+    case BoxFit.cover:
+      return Icons.crop_din_rounded;
+    case BoxFit.fill:
+      return Icons.crop;
+    default:
+      return Icons.crop_original_rounded;
   }
 }
 
@@ -1117,8 +1178,8 @@ class _BottomBar extends StatelessWidget {
                     ),
                   ),
                 IconButton(
-                  tooltip: 'Aspect ratio',
-                  icon: const Icon(Icons.aspect_ratio, color: Colors.white),
+                  tooltip: _fitLabel(fit),
+                  icon: Icon(_fitIcon(fit), color: Colors.white),
                   onPressed: onCycleFit,
                 ),
               ],

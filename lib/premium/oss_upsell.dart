@@ -11,10 +11,9 @@ ProEntitlement? proUpsellEntitlement;
 
 /// OSS edition upsell.
 ///
-/// Release builds default the effective tier to Ultra (see
-/// `ProEntitlement.freshInstallTier`), so a feature gate can only fire in
-/// debug/profile free-tier testing. There is no purchase path, so instead of
-/// a billing sheet we show an honest one-liner.
+/// Features are limited to the free tier in this edition. There is no
+/// purchase path; the snackbar informs the user that the feature requires
+/// Aurora Pro or Ultra from the Play Store edition.
 Future<void> showProUpsell(
   BuildContext context,
   ProFeature feature, {
@@ -24,8 +23,8 @@ Future<void> showProUpsell(
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(
-        '${ProFeatures.displayName(feature)} is unlocked in this '
-        'open-source build.',
+        '${ProFeatures.displayName(feature)} requires Aurora '
+        '${ProFeatures.tierBadge(feature)}.',
       ),
       duration: const Duration(seconds: 3),
     ),
