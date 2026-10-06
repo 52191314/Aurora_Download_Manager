@@ -76,8 +76,10 @@ jobs:
           # One build per ABI — the same commands as the fdroiddata recipe
           # build blocks (templates/build-flutter.yml split pattern), so the
           # outputs are byte-identical on both sides.
-          flutter build apk --release --split-per-abi --target-platform="android-arm"
-          flutter build apk --release --split-per-abi --target-platform="android-arm64"
+          flutter build apk --release --split-per-abi --target-platform="android-arm" \
+            --dart-define=AURORA_BUILD_CHANNEL=fdroid
+          flutter build apk --release --split-per-abi --target-platform="android-arm64" \
+            --dart-define=AURORA_BUILD_CHANNEL=fdroid
 
       - name: Normalize ZIP metadata (match the F-Droid postbuild)
         working-directory: /upstream/path/aurora-downloader
