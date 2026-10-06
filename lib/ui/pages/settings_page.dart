@@ -23,6 +23,7 @@ import '../../backup/unified_backup_database.dart';
 
 import '../../settings/download_settings.dart';
 import '../../sniffer/ad_block_engine_native.dart';
+import '../../premium/build_channel.dart';
 import '../../premium/pro_entitlement.dart';
 import '../../premium/pro_features.dart';
 import '../../premium/oss_upsell.dart';
@@ -1010,7 +1011,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   for (final option in PlaybackEngineSetting.values)
-                    RadioListTile<PlaybackEngineSetting>(
+                    if (!BuildChannel.isFdroid || option == PlaybackEngineSetting.videoPlayer)
+                      RadioListTile<PlaybackEngineSetting>(
                       value: option,
                       // ignore: deprecated_member_use
                       groupValue: localEngine,

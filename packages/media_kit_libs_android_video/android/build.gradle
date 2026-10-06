@@ -42,12 +42,23 @@ android {
         minSdkVersion 16
     }
 
+    def isFdroid = (System.getenv("AURORA_BUILD_CHANNEL") ?: "").equalsIgnoreCase("fdroid") ||
+        (rootProject.findProperty("auroraBuildChannel") ?: "").toString().equalsIgnoreCase("fdroid") ||
+        (gradle.extensions.extraProperties.has("auroraFdroidChannel") && gradle.extensions.extraProperties.get("auroraFdroidChannel"))
+
     dependencies {
-        implementation fileTree(dir: "$buildDir/output", include: "*.jar")
+        if (!isFdroid) {
+            implementation fileTree(dir: "$buildDir/output", include: "*.jar")
+        }
     }
 }
 
-task downloadDependencies(type: Exec) {   
+def isFdroidBuild = (System.getenv("AURORA_BUILD_CHANNEL") ?: "").equalsIgnoreCase("fdroid") ||
+    (rootProject.findProperty("auroraBuildChannel") ?: "").toString().equalsIgnoreCase("fdroid") ||
+    (gradle.extensions.extraProperties.has("auroraFdroidChannel") && gradle.extensions.extraProperties.get("auroraFdroidChannel"))
+
+if (!isFdroidBuild) {
+    task downloadDependencies(type: Exec) {   
         // Delete previously created /output subdirectory.
 
         def outputDir = file("$buildDir/output")
@@ -94,6 +105,7 @@ task downloadDependencies(type: Exec) {
                 into outputDir
             }
         }
-}
+    }
 
-assemble.dependsOn(downloadDependencies)
+    assemble.dependsOn(downloadDependencies)
+}

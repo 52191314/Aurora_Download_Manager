@@ -25,6 +25,8 @@ if (keystorePropertiesFile.exists()) {
 // ---------------------------------------------------------------------------
 val isPlayChannel = gradle.extensions.getExtraProperties().has("auroraPlayChannel") &&
     (gradle.extensions.getExtraProperties().get("auroraPlayChannel") as Boolean)
+val isFdroidChannel = gradle.extensions.getExtraProperties().has("auroraFdroidChannel") &&
+    (gradle.extensions.getExtraProperties().get("auroraFdroidChannel") as Boolean)
 
 // F-Droid ABI split (templates/build-flutter.yml + Flac-R precedent): each
 // per-ABI APK gets a distinct versionCode so F-Droid serves the right split
@@ -146,6 +148,22 @@ android {
         }
     }
 
+
+    if (isFdroidChannel) {
+        packaging {
+            jniLibs {
+                excludes += listOf(
+                    "**/libffmpegkit*.so",
+                    "**/libav*.so",
+                    "**/libsw*.so",
+                    "**/liblibtorrent_flutter.so",
+                    "**/libtorrent*.so",
+                    "**/libmpv*.so",
+                    "**/libmediakitandroidhelper*.so",
+                )
+            }
+        }
+    }
 
     packaging {
         jniLibs {

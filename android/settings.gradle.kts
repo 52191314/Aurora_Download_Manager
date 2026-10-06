@@ -27,22 +27,18 @@ plugins {
 // Build channel detection — single source of truth for every module.
 // Computed HERE (settings evaluate before any project script) and stored on
 // the Gradle object, readable from :app and the feature modules via
-// `gradle.extensions.getExtraProperties().get("auroraPlayChannel")`.
+// `gradle.extensions.getExtraProperties().get("auroraBuildChannel")`.
 //   Play   → on-demand dynamic-feature modules (:ffmpeg, :torrent, :mediakit)
-//   GitHub → fat builds; the feature modules' tasks are disabled.
+//   Fdroid → 100% FOSS compliant; no dynamic features, no prebuilt .so
+//   GitHub → fat builds; all prebuilts bundled in base APK.
 // ---------------------------------------------------------------------------
-fun isPlayBuildChannel(): Boolean {
+fun getAuroraBuildChannel(): String {
     // 1. Env var (CI / shell): highest priority.
-    //    $env:AURORA_BUILD_CHANNEL="play"   → Play (on-demand modules)
-    //    $env:AURORA_BUILD_CHANNEL="github" → GitHub fat APK
     val envChannel = System.getenv("AURORA_BUILD_CHANNEL")?.lowercase()
-    if (envChannel == "play") return true
-    if (envChannel == "github") return false
+    if (envChannel == "play" || envChannel == "fdroid" || envChannel == "github") return envChannel
 
     // 2. --dart-define=AURORA_BUILD_CHANNEL=... — Flutter passes dart-defines
-    //    to Gradle as `-Pdart-defines=<base64 comma-joined list>`. Checked
-    //    before `auroraBuildChannel` (android/gradle.properties defaults it to
-    //    `github`, which would otherwise shadow the explicit define).
+    //    to Gradle as `-Pdart-defines=<base64 comma-joined list>`.
     val definesProp = providers.gradleProperty("dart-defines").orNull
     if (definesProp != null) {
         val decodedDefines = definesProp.split(',').mapNotNull { raw ->
@@ -50,12 +46,15 @@ fun isPlayBuildChannel(): Boolean {
                 String(java.util.Base64.getDecoder().decode(raw))
             }.getOrNull()
         }
-        if (decodedDefines.contains("AURORA_BUILD_CHANNEL=play") ||
-            definesProp.contains("QVVST1JBX0JVSUxEX0NIQU5ORUw9cGxheQ==")
-        ) {
-            return true
+        for (define in decodedDefines) {
+            if (define.startsWith("AURORA_BUILD_CHANNEL=")) {
+                val value = define.substringAfter("AURORA_BUILD_CHANNEL=").lowercase()
+                if (value.isNotEmpty()) return value
+            }
         }
-        if (decodedDefines.contains("AURORA_BUILD_CHANNEL=github")) return false
+        if (definesProp.contains("QVVST1JBX0JVSUxEX0NIQU5ORUw9cGxheQ==")) return "play"
+        if (definesProp.contains("QVVST1JBX0JVSUxEX0NIQU5ORUw9ZmRyb2lk")) return "fdroid"
+        if (definesProp.contains("QVVST1JBX0JVSUxEX0NIQU5ORUw9Z2l0aHVi")) return "github"
     }
 
     // 3. Legacy single-encoded property, then the explicit -P property.
@@ -63,23 +62,33 @@ fun isPlayBuildChannel(): Boolean {
     val decoded = encodedProp?.let {
         runCatching { String(java.util.Base64.getDecoder().decode(it)) }.getOrNull()
     }
-    if (decoded?.contains("AURORA_BUILD_CHANNEL=play") == true) return true
-    if (decoded?.contains("AURORA_BUILD_CHANNEL=github") == true) return false
+    if (decoded?.contains("AURORA_BUILD_CHANNEL=play") == true) return "play"
+    if (decoded?.contains("AURORA_BUILD_CHANNEL=fdroid") == true) return "fdroid"
+    if (decoded?.contains("AURORA_BUILD_CHANNEL=github") == true) return "github"
 
     val channelProp = providers.gradleProperty("auroraBuildChannel").orNull?.lowercase()
-    if (channelProp == "play") return true
-    if (channelProp == "github") return false
+    if (channelProp == "play" || channelProp == "fdroid" || channelProp == "github") return channelProp
 
-    // 4. Default: GitHub fat APK. Do NOT special-case bundle tasks here — doing
-    //    so silently turned every `flutter build appbundle` into a Play build
-    //    that stripped the FFmpeg/libmpv/libtorrent natives from the base and
-    //    crashed on launch (builds 38-44).
-    return false
+    return "github"
 }
 
-gradle.extensions.getExtraProperties().set("auroraPlayChannel", isPlayBuildChannel())
+val auroraChannel = getAuroraBuildChannel()
+val isPlay = auroraChannel == "play"
+val isFdroid = auroraChannel == "fdroid"
+
+gradle.extensions.getExtraProperties().set("auroraBuildChannel", auroraChannel)
+gradle.extensions.getExtraProperties().set("auroraPlayChannel", isPlay)
+gradle.extensions.getExtraProperties().set("auroraFdroidChannel", isFdroid)
 
 include(":app")
-include(":ffmpeg")
-include(":torrent")
-include(":mediakit")
+if (!isFdroid) {
+    include(":ffmpeg")
+    include(":torrent")
+    include(":mediakit")
+}
+
+if (isFdroid) {
+    gradle.settingsEvaluated {
+        findProject(":libtorrent_flutter")?.projectDir = file("stubs/libtorrent_flutter")
+    }
+}

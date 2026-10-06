@@ -116,6 +116,9 @@ abstract class FeatureModuleLoader {
       GlobalKey<NavigatorState>();
 
   static FeatureModuleLoader _create() {
+    if (BuildChannel.isFdroid) {
+      return FdroidModuleLoader();
+    }
     if (BuildChannel.isPlay) {
       return PlayModuleLoader();
     }
@@ -163,6 +166,57 @@ abstract class FeatureModuleLoader {
   /// When [navigatorKey] is set, the user is asked to confirm the restart
   /// first (a module install should never silently relaunch the app).
   Future<bool> requestRestart({String? moduleId});
+}
+
+// ---------------------------------------------------------------------------
+// F-Droid — disabled / compliance stub
+// ---------------------------------------------------------------------------
+
+/// F-Droid builds do not bundle FFmpeg or native binary modules to comply with
+/// F-Droid Inclusion Policies.
+class FdroidModuleLoader extends FeatureModuleLoader {
+  FdroidModuleLoader() : super._();
+
+  static final _failedStream = Stream<FeatureModuleStatus>.value(
+    FeatureModuleStatus.failed,
+  );
+
+  @override
+  FeatureModuleStatus statusFor(String moduleId) => FeatureModuleStatus.failed;
+
+  @override
+  Stream<FeatureModuleStatus> watch(String moduleId) => _failedStream;
+
+  @override
+  Future<bool> ensureInstalled(
+    String moduleId, {
+    ModuleProgressCallback? onProgress,
+  }) async {
+    return false;
+  }
+
+  @override
+  String displayName(String moduleId) {
+    switch (moduleId) {
+      case 'ffmpeg':
+        return 'FFmpeg media tools (Unavailable in F-Droid)';
+      case 'torrent':
+        return 'BitTorrent engine (Unavailable in F-Droid)';
+      case 'mediakit':
+        return 'Media player engine (Unavailable in F-Droid)';
+      default:
+        return moduleId;
+    }
+  }
+
+  @override
+  int? estimatedSizeBytes(String moduleId) => null;
+
+  @override
+  bool installedInCurrentProcess(String moduleId) => false;
+
+  @override
+  Future<bool> requestRestart({String? moduleId}) async => false;
 }
 
 // ---------------------------------------------------------------------------

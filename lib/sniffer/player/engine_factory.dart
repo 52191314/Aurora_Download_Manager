@@ -1,3 +1,4 @@
+import '../../premium/build_channel.dart';
 import 'engines/media_kit_engine.dart';
 import 'engines/video_player_engine.dart';
 import 'playback_engine.dart';
@@ -7,6 +8,9 @@ import 'playback_engine.dart';
 /// The only place in the app that knows both implementations exist — everything
 /// else talks to [PlaybackEngine].
 PlaybackEngine createPlaybackEngine(PlaybackEngineKind kind) {
+  if (BuildChannel.isFdroid) {
+    return VideoPlayerEngine();
+  }
   return switch (kind) {
     PlaybackEngineKind.videoPlayer => VideoPlayerEngine(),
     PlaybackEngineKind.mediaKit => MediaKitEngine(),

@@ -1,0 +1,12 @@
+// Stub library for libtorrent_flutter in F-Droid builds.
+// Complies with F-Droid Inclusion Policy: zero prebuilt binaries, zero network downloads, zero C++ CMake.
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.libtorrentflutter.libtorrent_flutter'
+    compileSdkVersion 36
+
+    defaultConfig {
+        minSdkVersion 24
+    }
+}

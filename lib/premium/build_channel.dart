@@ -22,8 +22,11 @@ class BuildChannel {
   /// Google Play Store distributed build (Play Billing required for Pro).
   static bool get isPlay => raw.toLowerCase() == 'play';
 
-  /// GitHub / F-Droid-style / sideload build (no Play Billing).
-  static bool get isGithub => !isPlay;
+  /// F-Droid compliant build (no prebuilt binaries, ExoPlayer fallback).
+  static bool get isFdroid => raw.toLowerCase() == 'fdroid';
 
-  static String get label => isPlay ? 'play' : 'github';
+  /// GitHub / sideload fat build (all prebuilts bundled).
+  static bool get isGithub => !isPlay && !isFdroid;
+
+  static String get label => isFdroid ? 'fdroid' : (isPlay ? 'play' : 'github');
 }

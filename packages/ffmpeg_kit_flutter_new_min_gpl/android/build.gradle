@@ -49,8 +49,24 @@ android {
         consumerProguardFiles 'consumer-rules.pro'
     }
 
+    def isFdroid = (System.getenv("AURORA_BUILD_CHANNEL") ?: "").equalsIgnoreCase("fdroid") ||
+        (rootProject.findProperty("auroraBuildChannel") ?: "").toString().equalsIgnoreCase("fdroid") ||
+        (gradle.extensions.extraProperties.has("auroraFdroidChannel") && gradle.extensions.extraProperties.get("auroraFdroidChannel"))
+
+    sourceSets {
+        main {
+            if (isFdroid) {
+                java.srcDirs = ['src/fdroid/java']
+            } else {
+                java.srcDirs = ['src/main/java']
+            }
+        }
+    }
+
     dependencies {
         implementation("androidx.annotation:annotation:1.9.1")
-        implementation("com.antonkarpenko:ffmpeg-kit-min-gpl:2.2.2")
+        if (!isFdroid) {
+            implementation("com.antonkarpenko:ffmpeg-kit-min-gpl:2.2.2")
+        }
     }
 }

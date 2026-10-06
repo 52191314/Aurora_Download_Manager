@@ -51,6 +51,7 @@ bool _isMissingNativeLibrary(Object error) {
 }
 
 Future<_LtLoadResult> _ensureLtLoaded(String saveDirectory) async {
+  if (BuildChannel.isFdroid) return _LtLoadResult.unavailable;
   if (lt.LibtorrentFlutter.isInitialized) return _LtLoadResult.ready;
   final loader = FeatureModuleLoader.instance;
   try {
@@ -159,6 +160,9 @@ class TorrentDownloader implements BaseDownloader {
   static Future<String?> checkNativeEngineAvailability({
     String? saveDirectory,
   }) async {
+    if (BuildChannel.isFdroid) {
+      return 'BitTorrent downloading is disabled in the F-Droid build to comply with F-Droid inclusion policies. Please use the GitHub release for torrent support.';
+    }
     final available = await isNativeEngineAvailable(
       saveDirectory: saveDirectory,
     );
@@ -219,11 +223,15 @@ class TorrentDownloader implements BaseDownloader {
     final isMagnet = task.url.startsWith('magnet:');
     task.state = DownloadState.failed;
     task.failureReason = DownloadFailure.nativeEngineUnavailable;
-    task.errorMessage = isMagnet
-        ? 'Magnet downloads require the native torrent engine, which is '
-            'unavailable for this task.'
-        : 'Torrent downloads require the native torrent engine, which is '
-            'unavailable for this task.';
+    if (BuildChannel.isFdroid) {
+      task.errorMessage = 'BitTorrent downloading is disabled in the F-Droid build to comply with F-Droid inclusion policies. Please use the GitHub release for torrent support.';
+    } else {
+      task.errorMessage = isMagnet
+          ? 'Magnet downloads require the native torrent engine, which is '
+              'unavailable for this task.'
+          : 'Torrent downloads require the native torrent engine, which is '
+              'unavailable for this task.';
+    }
     task.speed = 0.0;
     _taskUpdateController.add(task);
   }
