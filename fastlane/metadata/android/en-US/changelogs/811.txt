@@ -1,0 +1,5 @@
+F-Droid compliant release (v1.3.2):
+- Introduced dedicated F-Droid build channel with zero prebuilt binaries.
+- Pure open-source video playback via ExoPlayer.
+- Cleaned native toolchain dependencies for reproducible builds.
+- Multi-threaded download acceleration, smart sniffer batch capture, and built-in adblock.

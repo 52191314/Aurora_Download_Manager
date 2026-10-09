@@ -28,7 +28,6 @@ git clone https://github.com/52191314/Aurora_Download_Manager.git && cd Aurora_D
   <img src="docs/screenshots/storefront_03.png" width="125" alt="Ad-Free Clean & Private Browser" />
   <img src="docs/screenshots/storefront_04.png" width="125" alt="HD Video Player with PiP & Speed Control" />
   <img src="docs/screenshots/storefront_05.png" width="125" alt="Download with Your Own Rules" />
-  <img src="docs/screenshots/storefront_06.png" width="125" alt="Google Drive Sync & Power Tools" />
   <img src="docs/screenshots/storefront_07.png" width="125" alt="Auto-Backup & Easy Migration" />
 </p>
 

@@ -1,4 +1,4 @@
-Optimus Download Manager (ODM) is a web browser with a serious download manager built in.
+Aurora Download Manager (ADM) is a web browser with a serious download manager built in.
 
 BROWSE WITHOUT THE JUNK
 
@@ -26,6 +26,7 @@ TORRENTS, INCLUDED
 • Download torrents and magnet links with a fast native engine
 • Finished torrents save straight to your Downloads folder — multi-file torrents included
 • Pause, resume, and seed from your device
+*(Note: Torrent downloads and the media_kit player are disabled in the F-Droid build to comply with F-Droid's zero-prebuilt-binary policy; standard direct HTTP/HTTPS and streaming downloads are fully supported.)*
 
 MOVING IN FROM ANOTHER APP
 
@@ -39,16 +40,16 @@ YOUR FILES STAY YOURS
 • Send files to your computer over your own Wi-Fi, with nothing routed through a server
 • No account required. No ads. No trackers.
 
-WHAT ODM DOES NOT DO
+WHAT AURORA DOWNLOAD MANAGER DOES NOT DO
  
-• Ad blocking works inside ODM's own browser only. It is not a VPN and does not filter other apps
+• Ad blocking works inside the browser only. It is not a VPN and does not filter other apps
 • Only download content you have the right to download
  
-ODM is free and open source (GPL-3.0). This build is the open-source edition with no purchases, no account and no ads.
+Aurora Download Manager is free and open source (GPL-3.0). This build is the open-source F-Droid edition with no purchases, no account and no ads.
 
 DONATE
 
 • Donation page: https://ahjie521.store/donation
 • USDT (BEP20/BSC): 0xd08d47bde441888166b801616754c667672cd502
 
-Not affiliated with Google, YouTube, or any third-party media service.
+Note: Aurora Download Manager is an independent open-source project and is not affiliated with Aurora OSS, Aurora Store, or Aurora Droid. Not affiliated with Google, YouTube, or any third-party media service.
