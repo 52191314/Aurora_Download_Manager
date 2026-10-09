@@ -1,47 +1,9 @@
-# Agent notes — Aurora Downloader
-
-## Build channels
-
-The app has two distribution channels controlled by `--dart-define=AURORA_BUILD_CHANNEL`:
-
-| Channel | `--dart-define` | Use case |
-|---------|-----------------|----------|
-| **play** | `AURORA_BUILD_CHANNEL=play` | Google Play Store release (enables Play Billing for Pro; FFmpeg as on-demand module) |
-| **github** | (default) | GitHub / F-Droid / sideload builds (no billing; FFmpeg in fat APK) |
-
-### Release AAB for Play Store
-
-```bash
-flutter build appbundle --release --dart-define=AURORA_BUILD_CHANNEL=play
-```
-
-The release AAB at `build/app/outputs/bundle/release/app-release.aab` is signed with `upload-keystore.jks` when `android/key.properties` is present. This file is gitignored.
-
-The FFmpeg native library (~10 MB) is **not** included in the base AAB — it is downloaded on-demand from Play Store when the user first opens FFmpeg Studio (Ultra tier only). See `docs/play_on_demand_modules_plan.md`.
-
-### Debug APK for local testing
-
-Debug/profile APK builds are always **fat** (FFmpeg included). The on-demand module only activates for release AAB builds with `AURORA_BUILD_CHANNEL=play`.
-
-```bash
-flutter build apk --debug
-# or with Play Billing for testing:
-flutter build apk --debug --dart-define=AURORA_BUILD_CHANNEL=play
-# Optional: disable first-launch app tour (product default is ON):
-flutter run --dart-define=AURORA_BUILD_CHANNEL=github --dart-define=AURORA_ENABLE_ONBOARDING=false
-```
-
-Default channel is `github` so open-source / sideload builds never ship a billing client by accident.
-First install auto-shows the interactive app tour; system permissions wait until the tour is finished or skipped.
-
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
 
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
+**This project has a knowledge graph. Start with the code-review-graph
+MCP tools to narrow scope, then read the source.** The graph is cheaper than scanning files and
+gives you structural context (callers, dependents, test coverage) that file search cannot.
 
 ### When to use graph tools FIRST
 
@@ -51,7 +13,15 @@ scanning cannot.
 - **Finding relationships**: `query_graph_tool` with callers_of/callees_of/imports_of/tests_for
 - **Architecture questions**: `get_architecture_overview_tool` + `list_communities_tool`
 
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
+### Verify in the source
+
+- Narrow scope with the graph, then read the source. Do not change code from graph output alone.
+- For any non-trivial change, read the implementation and the relevant tests before concluding.
+- Verify the exact source when touching behavior, database logic, migrations, retries, fallbacks,
+  recovery, or compatibility code.
+- When the graph and the source disagree, the source wins. The graph may be stale or may not
+  model that relationship.
+- An empty graph result can mean "not indexed" or "not statically visible", not "does not exist".
 
 ### Key Tools
 
@@ -72,3 +42,16 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes_tool` for code review.
 3. Use `get_affected_flows_tool` to understand impact.
 4. Use `query_graph_tool` pattern="tests_for" to check coverage.
+<!-- /code-review-graph MCP tools -->
+
+## Critical Storage Invariants
+- **Public Downloads over App Sandbox**: User-facing downloads must NEVER be trapped in app-isolated directories (`/Android/data/<package>/files/Downloads` or internal storage).
+- **Android 10+ (API 29+) MediaStore 2-Phase Commit**:
+  1. Stream download chunks to a pending record (`IS_PENDING = 1`).
+  2. Set `IS_PENDING = 0` on completion to publish the file to public `Download/ODM Downloader`.
+  3. Clean up pending records on cancellation or failure to avoid 0-byte phantom files.
+- **Legacy Fallback (API < 29)**: Write to `Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)` and invoke `MediaScannerConnection.scanFile()`.
+
+## Environment & Build Invariants
+- **Signing & Secret Shield**: Keystore passwords and private keys stay in `android/key.properties` (never commit).
+- **Toolchain Invariants**: Dev tools and SDKs live in `E:\03_Devops`. Never run builds or download gradle/flutter dependencies on drive `D:\`.
