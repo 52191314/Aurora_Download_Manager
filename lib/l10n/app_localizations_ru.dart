@@ -1688,4 +1688,70 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsScheduledEmptyHint =>
       'Добавьте загрузку и выберите «Скачать позже», чтобы запланировать её здесь.';
+
+  @override
+  String get pasteLink => 'Вставить ссылку';
+
+  @override
+  String get sortFieldDate => 'Дата';
+
+  @override
+  String get sortFieldName => 'Имя';
+
+  @override
+  String get sortFieldSize => 'Размер';
+
+  @override
+  String get sortFieldPriority => 'Приоритет';
+
+  @override
+  String get sortFieldState => 'Статус';
+
+  @override
+  String get sortFieldSpeed => 'Скорость';
+
+  @override
+  String get batteryOptDialogTitle => 'Оптимизация батареи';
+
+  @override
+  String get batteryOptDialogContent =>
+      'Aurora Downloader требует разрешения на работу в фоновом режиме для бесперебойной загрузки.\n\nИсключить Aurora из оптимизации батареи?';
+
+  @override
+  String get btnNeverAskAgain => 'Больше не спрашивать';
+
+  @override
+  String get btnLater => 'Позже';
+
+  @override
+  String get btnOpenSettings => 'Открыть настройки';
+
+  @override
+  String get linkRefreshNeededTitle => 'Требуется обновить ссылку';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return 'Не удалось завершить загрузку «$name» после нескольких попыток.';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly =>
+      'Загрузка неоднократно завершалась сбоем (истёк срок ссылки или блокировка сети).';
+
+  @override
+  String get linkRefreshPrompt =>
+      'Попытаться обновить ссылку автоматически в фоне или открыть исходную страницу в браузере?';
+
+  @override
+  String get btnOpenInBrowser => 'Открыть в браузере';
+
+  @override
+  String get btnRefreshAutomatically => 'Обновить автоматически';
+
+  @override
+  String get settingsSearchSuggestions => 'Поисковые подсказки';
+
+  @override
+  String get settingsSearchSuggestionsDesc =>
+      'Получать подсказки от поисковой системы при вводе в адресной строке';
 }

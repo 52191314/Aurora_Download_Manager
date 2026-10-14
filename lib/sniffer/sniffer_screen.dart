@@ -2153,6 +2153,7 @@ class _SnifferScreenState extends State<SnifferScreen>
       tab: _activeTab,
       library: _library,
       searchEngine: widget.settings.searchEngine,
+      enableSearchSuggestions: widget.settings.searchSuggestionsEnabled,
       rebuild: () {
         if (mounted) setState(() {});
       },
@@ -3123,7 +3124,7 @@ class _SnifferScreenState extends State<SnifferScreen>
       if (uri != null && uri.host.isNotEmpty) return uri.host;
       return raw;
     }
-    return 'New Tab';
+    return AppLocalizations.of(context)?.btnNewTab ?? 'New tab';
   }
 
   Widget _buildSuggestionPanel({required bool allowScroll}) {

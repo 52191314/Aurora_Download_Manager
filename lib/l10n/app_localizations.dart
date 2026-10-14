@@ -3331,6 +3331,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add a download and choose \"Download later\" to schedule it here.'**
   String get settingsScheduledEmptyHint;
+
+  /// No description provided for @pasteLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste link'**
+  String get pasteLink;
+
+  /// No description provided for @sortFieldDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Date'**
+  String get sortFieldDate;
+
+  /// No description provided for @sortFieldName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get sortFieldName;
+
+  /// No description provided for @sortFieldSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get sortFieldSize;
+
+  /// No description provided for @sortFieldPriority.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority'**
+  String get sortFieldPriority;
+
+  /// No description provided for @sortFieldState.
+  ///
+  /// In en, this message translates to:
+  /// **'State'**
+  String get sortFieldState;
+
+  /// No description provided for @sortFieldSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed'**
+  String get sortFieldSpeed;
+
+  /// No description provided for @batteryOptDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery Optimization'**
+  String get batteryOptDialogTitle;
+
+  /// No description provided for @batteryOptDialogContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Aurora Downloader requires background execution permission to ensure uninterrupted downloads.\n\nWould you like to exclude Aurora from battery optimization?'**
+  String get batteryOptDialogContent;
+
+  /// No description provided for @btnNeverAskAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Never ask again'**
+  String get btnNeverAskAgain;
+
+  /// No description provided for @btnLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get btnLater;
+
+  /// No description provided for @btnOpenSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get btnOpenSettings;
+
+  /// No description provided for @linkRefreshNeededTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Link Refresh Needed'**
+  String get linkRefreshNeededTitle;
+
+  /// No description provided for @linkRefreshNeededDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{name}\" could not complete after multiple attempts.'**
+  String linkRefreshNeededDesc(String name);
+
+  /// No description provided for @linkRefreshFailedRepeatedly.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed repeatedly (expired link or network block).'**
+  String get linkRefreshFailedRepeatedly;
+
+  /// No description provided for @linkRefreshPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Would you like to attempt an automatic background refresh or open the source page in the browser?'**
+  String get linkRefreshPrompt;
+
+  /// No description provided for @btnOpenInBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Browser'**
+  String get btnOpenInBrowser;
+
+  /// No description provided for @btnRefreshAutomatically.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh Automatically'**
+  String get btnRefreshAutomatically;
+
+  /// No description provided for @settingsSearchSuggestions.
+  ///
+  /// In en, this message translates to:
+  /// **'Search suggestions'**
+  String get settingsSearchSuggestions;
+
+  /// No description provided for @settingsSearchSuggestionsDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch suggestions from search engine while typing in the address bar'**
+  String get settingsSearchSuggestionsDesc;
 }
 
 class _AppLocalizationsDelegate

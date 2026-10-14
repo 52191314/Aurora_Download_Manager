@@ -123,7 +123,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onboardingStep4Desc =>
-      'Verwalten Sie mehere Seiten gleichzeitig — öffnen, wechseln oder schließen Sie Tabs über diese Steuerung.';
+      'Verwalten Sie mehrere Seiten gleichzeitig — öffnen, wechseln oder schließen Sie Tabs über diese Steuerung.';
 
   @override
   String get onboardingStep5Title => 'Menü-Popup (⋯)';
@@ -1691,4 +1691,70 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get settingsScheduledEmptyHint =>
       'Fügen Sie einen Download hinzu und wählen Sie „Später herunterladen“, um ihn hier zu planen.';
+
+  @override
+  String get pasteLink => 'Link einfügen';
+
+  @override
+  String get sortFieldDate => 'Datum';
+
+  @override
+  String get sortFieldName => 'Name';
+
+  @override
+  String get sortFieldSize => 'Größe';
+
+  @override
+  String get sortFieldPriority => 'Priorität';
+
+  @override
+  String get sortFieldState => 'Status';
+
+  @override
+  String get sortFieldSpeed => 'Geschwindigkeit';
+
+  @override
+  String get batteryOptDialogTitle => 'Akku-Optimierung';
+
+  @override
+  String get batteryOptDialogContent =>
+      'Aurora Downloader benötigt die Berechtigung zur Ausführung im Hintergrund, um unterbrechungsfreie Downloads zu gewährleisten.\n\nMöchten Sie Aurora von der Akku-Optimierung ausschließen?';
+
+  @override
+  String get btnNeverAskAgain => 'Nicht mehr nachfragen';
+
+  @override
+  String get btnLater => 'Später';
+
+  @override
+  String get btnOpenSettings => 'Einstellungen öffnen';
+
+  @override
+  String get linkRefreshNeededTitle => 'Link-Aktualisierung erforderlich';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return '„$name“ konnte nach mehreren Versuchen nicht abgeschlossen werden.';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly =>
+      'Download ist wiederholt fehlgeschlagen (abgelaufener Link oder Netzwerkblockierung).';
+
+  @override
+  String get linkRefreshPrompt =>
+      'Möchten Sie eine automatische Aktualisierung im Hintergrund versuchen oder die Quellseite im Browser öffnen?';
+
+  @override
+  String get btnOpenInBrowser => 'Im Browser öffnen';
+
+  @override
+  String get btnRefreshAutomatically => 'Automatisch aktualisieren';
+
+  @override
+  String get settingsSearchSuggestions => 'Suchvorschläge';
+
+  @override
+  String get settingsSearchSuggestionsDesc =>
+      'Vorschläge von der Suchmaschine beim Tippen in der Adressleiste abrufen';
 }

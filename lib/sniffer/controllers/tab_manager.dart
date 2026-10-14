@@ -213,10 +213,10 @@ class TabManager {
   }
 
   /// Human-readable label for a tab (used in the tab strip).
-  static String tabLabel(BrowserTab tab) {
+  static String tabLabel(BrowserTab tab, [String? defaultLabel]) {
     if (tab.title != null && tab.title!.isNotEmpty) return tab.title!;
     final url = tab.currentUrl ?? tab.addressController.text;
-    if (url.isEmpty || url == 'about:blank') return 'New Tab';
+    if (url.isEmpty || url == 'about:blank') return defaultLabel ?? 'New Tab';
     final uri = Uri.tryParse(url);
     if (uri != null && uri.host.isNotEmpty) return uri.host;
     return url.length > 40 ? '${url.substring(0, 40)}…' : url;

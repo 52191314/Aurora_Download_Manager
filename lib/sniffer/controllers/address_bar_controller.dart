@@ -65,6 +65,7 @@ class AddressBarController {
     required VoidCallback rebuild,
     BrowserLibrary? library,
     SearchEngine? searchEngine,
+    bool enableSearchSuggestions = true,
   }) {
     if (!addressExpanded) {
       clearSuggestions();
@@ -84,6 +85,7 @@ class AddressBarController {
         tab: tab,
         library: library,
         searchEngine: searchEngine,
+        enableSearchSuggestions: enableSearchSuggestions,
       ));
     });
   }
@@ -94,6 +96,7 @@ class AddressBarController {
     required BrowserTab tab,
     BrowserLibrary? library,
     SearchEngine? searchEngine,
+    bool enableSearchSuggestions = true,
   }) async {
     final query = raw.trim();
     if (query.isEmpty) {
@@ -126,8 +129,9 @@ class AddressBarController {
     }
     rebuild();
 
-    // Skip remote typeahead when the user is clearly pasting/typing a URL.
-    if (_looksLikeNavigableUrl(query)) return;
+    // Skip remote typeahead when the user has disabled search suggestions
+    // or is clearly pasting/typing a URL.
+    if (!enableSearchSuggestions || _looksLikeNavigableUrl(query)) return;
 
     final remote = await _searchSuggestionService.suggestions(
       query,

@@ -1684,4 +1684,70 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsScheduledEmptyHint =>
       'Add a download and choose \"Download later\" to schedule it here.';
+
+  @override
+  String get pasteLink => 'Paste link';
+
+  @override
+  String get sortFieldDate => 'Date';
+
+  @override
+  String get sortFieldName => 'Name';
+
+  @override
+  String get sortFieldSize => 'Size';
+
+  @override
+  String get sortFieldPriority => 'Priority';
+
+  @override
+  String get sortFieldState => 'State';
+
+  @override
+  String get sortFieldSpeed => 'Speed';
+
+  @override
+  String get batteryOptDialogTitle => 'Battery Optimization';
+
+  @override
+  String get batteryOptDialogContent =>
+      'Aurora Downloader requires background execution permission to ensure uninterrupted downloads.\n\nWould you like to exclude Aurora from battery optimization?';
+
+  @override
+  String get btnNeverAskAgain => 'Never ask again';
+
+  @override
+  String get btnLater => 'Later';
+
+  @override
+  String get btnOpenSettings => 'Open settings';
+
+  @override
+  String get linkRefreshNeededTitle => 'Link Refresh Needed';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return '\"$name\" could not complete after multiple attempts.';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly =>
+      'Download failed repeatedly (expired link or network block).';
+
+  @override
+  String get linkRefreshPrompt =>
+      'Would you like to attempt an automatic background refresh or open the source page in the browser?';
+
+  @override
+  String get btnOpenInBrowser => 'Open in Browser';
+
+  @override
+  String get btnRefreshAutomatically => 'Refresh Automatically';
+
+  @override
+  String get settingsSearchSuggestions => 'Search suggestions';
+
+  @override
+  String get settingsSearchSuggestionsDesc =>
+      'Fetch suggestions from search engine while typing in the address bar';
 }

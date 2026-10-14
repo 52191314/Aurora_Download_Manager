@@ -1649,4 +1649,68 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get settingsScheduledEmptyHint =>
       'ダウンロードを追加して「後でダウンロード」を選ぶと、ここでスケジュールできます。';
+
+  @override
+  String get pasteLink => 'リンクを貼り付け';
+
+  @override
+  String get sortFieldDate => '日付';
+
+  @override
+  String get sortFieldName => '名前';
+
+  @override
+  String get sortFieldSize => 'サイズ';
+
+  @override
+  String get sortFieldPriority => '優先度';
+
+  @override
+  String get sortFieldState => '状態';
+
+  @override
+  String get sortFieldSpeed => '速度';
+
+  @override
+  String get batteryOptDialogTitle => 'バッテリーの最適化';
+
+  @override
+  String get batteryOptDialogContent =>
+      'ダウンロードを中断なく完了するために、Aurora Downloaderのバックグラウンド実行権限が必要です。\n\nAuroraをバッテリー最適化から除外しますか？';
+
+  @override
+  String get btnNeverAskAgain => '今後確認しない';
+
+  @override
+  String get btnLater => '後で';
+
+  @override
+  String get btnOpenSettings => '設定を開く';
+
+  @override
+  String get linkRefreshNeededTitle => 'リンクの更新が必要です';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return '複数回試行しましたが「$name」を完了できませんでした。';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly =>
+      'ダウンロードが繰り返し失敗しました（リンクの期限切れまたはネットワーク制限）。';
+
+  @override
+  String get linkRefreshPrompt => 'バックグラウンドで自動更新を試行しますか？それともブラウザで元のページを開きますか？';
+
+  @override
+  String get btnOpenInBrowser => 'ブラウザで開く';
+
+  @override
+  String get btnRefreshAutomatically => '自動更新';
+
+  @override
+  String get settingsSearchSuggestions => '検索の候補';
+
+  @override
+  String get settingsSearchSuggestionsDesc => 'アドレスバーに入力中に検索エンジンから候補を取得する';
 }

@@ -1690,4 +1690,70 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get settingsScheduledEmptyHint =>
       'Adicione um download e escolha \"Baixar mais tarde\" para agendá-lo aqui.';
+
+  @override
+  String get pasteLink => 'Colar link';
+
+  @override
+  String get sortFieldDate => 'Data';
+
+  @override
+  String get sortFieldName => 'Nome';
+
+  @override
+  String get sortFieldSize => 'Tamanho';
+
+  @override
+  String get sortFieldPriority => 'Prioridade';
+
+  @override
+  String get sortFieldState => 'Status';
+
+  @override
+  String get sortFieldSpeed => 'Velocidade';
+
+  @override
+  String get batteryOptDialogTitle => 'Otimização de bateria';
+
+  @override
+  String get batteryOptDialogContent =>
+      'O Aurora Downloader precisa de permissão de execução em segundo plano para garantir downloads ininterruptos.\n\nDeseja excluir o Aurora da otimização de bateria?';
+
+  @override
+  String get btnNeverAskAgain => 'Não perguntar novamente';
+
+  @override
+  String get btnLater => 'Mais tarde';
+
+  @override
+  String get btnOpenSettings => 'Abrir configurações';
+
+  @override
+  String get linkRefreshNeededTitle => 'Atualização de link necessária';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return '\"$name\" não pôde ser concluído após várias tentativas.';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly =>
+      'O download falhou repetidamente (link expirado ou bloqueio de rede).';
+
+  @override
+  String get linkRefreshPrompt =>
+      'Deseja tentar uma atualização automática em segundo plano ou abrir a página de origem no navegador?';
+
+  @override
+  String get btnOpenInBrowser => 'Abrir no navegador';
+
+  @override
+  String get btnRefreshAutomatically => 'Atualizar automaticamente';
+
+  @override
+  String get settingsSearchSuggestions => 'Sugestões de pesquisa';
+
+  @override
+  String get settingsSearchSuggestionsDesc =>
+      'Obter sugestões do mecanismo de pesquisa ao digitar na barra de endereços';
 }

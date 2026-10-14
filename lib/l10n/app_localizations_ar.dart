@@ -1687,4 +1687,70 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get settingsScheduledEmptyHint =>
       'أضف تنزيلًا واختر «التنزيل لاحقًا» لجدولته هنا.';
+
+  @override
+  String get pasteLink => 'لصق الرابط';
+
+  @override
+  String get sortFieldDate => 'التاريخ';
+
+  @override
+  String get sortFieldName => 'الاسم';
+
+  @override
+  String get sortFieldSize => 'الحجم';
+
+  @override
+  String get sortFieldPriority => 'الأولوية';
+
+  @override
+  String get sortFieldState => 'الحالة';
+
+  @override
+  String get sortFieldSpeed => 'السرعة';
+
+  @override
+  String get batteryOptDialogTitle => 'تحسين البطارية';
+
+  @override
+  String get batteryOptDialogContent =>
+      'يتطلب Aurora Downloader إذن التشغيل في الخلفية لضمان تنزيلات دون انقطاع.\n\nهل ترغب في استبعاد Aurora من تحسين البطارية؟';
+
+  @override
+  String get btnNeverAskAgain => 'عدم السؤال مرة أخرى';
+
+  @override
+  String get btnLater => 'لاحقًا';
+
+  @override
+  String get btnOpenSettings => 'فتح الإعدادات';
+
+  @override
+  String get linkRefreshNeededTitle => 'مطلوب تحديث الرابط';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return 'تعذر إكمال \"$name\" بعد عدة محاولات.';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly =>
+      'فشل التنزيل بشكل متكرر (رابط منتهي الصلاحية أو حظر في الشبكة).';
+
+  @override
+  String get linkRefreshPrompt =>
+      'هل ترغب في محاولة التحديث التلقائي في الخلفية أو فتح صفحة المصدر في المتصفح؟';
+
+  @override
+  String get btnOpenInBrowser => 'فتح في المتصفح';
+
+  @override
+  String get btnRefreshAutomatically => 'تحديث تلقائي';
+
+  @override
+  String get settingsSearchSuggestions => 'اقتراحات البحث';
+
+  @override
+  String get settingsSearchSuggestionsDesc =>
+      'جلب الاقتراحات من محرك البحث أثناء الكتابة في شريط العناوين';
 }

@@ -1693,4 +1693,70 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get settingsScheduledEmptyHint =>
       'Añade una descarga y elige «Descargar más tarde» para programarla aquí.';
+
+  @override
+  String get pasteLink => 'Pegar enlace';
+
+  @override
+  String get sortFieldDate => 'Fecha';
+
+  @override
+  String get sortFieldName => 'Nombre';
+
+  @override
+  String get sortFieldSize => 'Tamaño';
+
+  @override
+  String get sortFieldPriority => 'Prioridad';
+
+  @override
+  String get sortFieldState => 'Estado';
+
+  @override
+  String get sortFieldSpeed => 'Velocidad';
+
+  @override
+  String get batteryOptDialogTitle => 'Optimización de batería';
+
+  @override
+  String get batteryOptDialogContent =>
+      'Aurora Downloader requiere permiso de ejecución en segundo plano para garantizar descargas ininterrumpidas.\n\n¿Desea excluir Aurora de la optimización de batería?';
+
+  @override
+  String get btnNeverAskAgain => 'No volver a preguntar';
+
+  @override
+  String get btnLater => 'Más tarde';
+
+  @override
+  String get btnOpenSettings => 'Abrir ajustes';
+
+  @override
+  String get linkRefreshNeededTitle => 'Actualización de enlace necesaria';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return '\"$name\" no pudo completarse después de varios intentos.';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly =>
+      'La descarga falló repetidamente (enlace caducado o bloqueo de red).';
+
+  @override
+  String get linkRefreshPrompt =>
+      '¿Desea intentar una actualización automática en segundo plano o abrir la página de origen en el navegador?';
+
+  @override
+  String get btnOpenInBrowser => 'Abrir en el navegador';
+
+  @override
+  String get btnRefreshAutomatically => 'Actualizar automáticamente';
+
+  @override
+  String get settingsSearchSuggestions => 'Sugerencias de búsqueda';
+
+  @override
+  String get settingsSearchSuggestionsDesc =>
+      'Obtener sugerencias del motor de búsqueda al escribir en la barra de direcciones';
 }

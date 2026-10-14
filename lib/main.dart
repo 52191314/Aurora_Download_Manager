@@ -891,28 +891,30 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
   }
 
   Future<BatteryOptChoice?> _showBatteryOptRequestDialog() {
+    final l = AppLocalizations.of(context);
     return showDialog<BatteryOptChoice>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Battery Optimization'),
-        content: const Text(
-          'Aurora Downloader requires background execution permission to ensure uninterrupted downloads.\n\n'
-          'Would you like to exclude Aurora from battery optimization?',
+        title: Text(l?.batteryOptDialogTitle ?? 'Battery Optimization'),
+        content: Text(
+          l?.batteryOptDialogContent ??
+              'Aurora Downloader requires background execution permission to ensure uninterrupted downloads.\n\n'
+              'Would you like to exclude Aurora from battery optimization?',
         ),
         actions: [
           TextButton(
             onPressed: () =>
                 Navigator.of(ctx).pop(BatteryOptChoice.neverAskAgain),
-            child: const Text('Never ask again'),
+            child: Text(l?.btnNeverAskAgain ?? 'Never ask again'),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(BatteryOptChoice.later),
-            child: const Text('Later'),
+            child: Text(l?.btnLater ?? 'Later'),
           ),
           FilledButton(
             onPressed: () =>
                 Navigator.of(ctx).pop(BatteryOptChoice.openSettings),
-            child: const Text('Open settings'),
+            child: Text(l?.btnOpenSettings ?? 'Open settings'),
           ),
         ],
       ),
@@ -1694,22 +1696,26 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
   /// Offers auto-resniff, manual resniff, and dismiss with honest diagnostics.
   Future<void> _showResniffSuggestedDialog(DownloadTask task) async {
     if (!mounted) return;
+    final l = AppLocalizations.of(context);
     final name = task.savePath.split('/').last;
     final lastRes = task.lastResniffResult;
     final diagnosticMsg = lastRes != null && !lastRes.isSuccess
         ? lastRes.userFacingMessage
-        : (task.errorMessage ?? 'Download failed repeatedly (expired link or network block).');
+        : (task.errorMessage ??
+            (l?.linkRefreshFailedRepeatedly ??
+                'Download failed repeatedly (expired link or network block).'));
 
     final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Link Refresh Needed'),
+        title: Text(l?.linkRefreshNeededTitle ?? 'Link Refresh Needed'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '"$name" could not complete after multiple attempts.',
+              l?.linkRefreshNeededDesc(name) ??
+                  '"$name" could not complete after multiple attempts.',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 10),
@@ -1728,26 +1734,27 @@ class _AuroraHomeState extends State<AuroraHome> with WidgetsBindingObserver {
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Would you like to attempt an automatic background refresh or open the source page in the browser?',
-              style: TextStyle(fontSize: 13),
+            Text(
+              l?.linkRefreshPrompt ??
+                  'Would you like to attempt an automatic background refresh or open the source page in the browser?',
+              style: const TextStyle(fontSize: 13),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop('dismiss'),
-            child: const Text('Dismiss'),
+            child: Text(l?.queueDlgDismiss ?? 'Dismiss'),
           ),
           TextButton.icon(
             icon: const Icon(Icons.open_in_browser_rounded, size: 16),
             onPressed: () => Navigator.of(ctx).pop('manual'),
-            label: const Text('Open in Browser'),
+            label: Text(l?.btnOpenInBrowser ?? 'Open in Browser'),
           ),
           ElevatedButton.icon(
             icon: const Icon(Icons.find_replace_rounded, size: 16),
             onPressed: () => Navigator.of(ctx).pop('auto'),
-            label: const Text('Refresh Automatically'),
+            label: Text(l?.btnRefreshAutomatically ?? 'Refresh Automatically'),
           ),
         ],
       ),

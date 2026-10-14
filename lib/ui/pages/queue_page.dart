@@ -969,7 +969,8 @@ class _QueuePageState extends State<QueuePage> {
                             splashRadius: 14,
                           )
                         : IconButton(
-                            tooltip: 'Paste link',
+                            tooltip: AppLocalizations.of(context)?.pasteLink ??
+                                'Paste link',
                             icon: Icon(
                               Icons.content_paste_rounded,
                               size: 18,
@@ -1457,19 +1458,20 @@ class _QueuePageState extends State<QueuePage> {
   }
 
   String _sortLabel(TaskSortField field) {
+    final l = AppLocalizations.of(context);
     switch (field) {
       case TaskSortField.date:
-        return 'Date';
+        return l?.sortFieldDate ?? 'Date';
       case TaskSortField.name:
-        return 'Name';
+        return l?.sortFieldName ?? 'Name';
       case TaskSortField.size:
-        return 'Size';
+        return l?.sortFieldSize ?? 'Size';
       case TaskSortField.priority:
-        return 'Priority';
+        return l?.sortFieldPriority ?? 'Priority';
       case TaskSortField.state:
-        return 'State';
+        return l?.sortFieldState ?? 'State';
       case TaskSortField.speed:
-        return 'Speed';
+        return l?.sortFieldSpeed ?? 'Speed';
     }
   }
 

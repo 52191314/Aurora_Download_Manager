@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_localizations.dart';
+
 /// User choice from the blocked-redirect confirmation dialog.
 enum RedirectPromptAction {
   foreground,
@@ -96,7 +98,7 @@ Future<RedirectPromptAction?> showStrictRedirectPromptDialog({
           FilledButton(
             onPressed: () =>
                 Navigator.of(ctx).pop(RedirectPromptAction.foreground),
-            child: const Text('New tab'),
+            child: Text(AppLocalizations.of(ctx)?.btnNewTab ?? 'New tab'),
           ),
         ],
       );

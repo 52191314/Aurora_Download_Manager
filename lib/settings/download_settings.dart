@@ -558,6 +558,7 @@ class DownloadSettings {
   final int chunksPerTask;
   final String downloadDestination;
   final SearchEngine searchEngine;
+  final bool searchSuggestionsEnabled;
   final bool adblockEnabled;
   final bool cloudflareStealthEnabled;
   final bool popupBlockingEnabled;
@@ -665,6 +666,7 @@ class DownloadSettings {
     required this.chunksPerTask,
     required this.downloadDestination,
     required this.searchEngine,
+    this.searchSuggestionsEnabled = true,
     required this.adblockEnabled,
     this.cloudflareStealthEnabled = true,
     this.popupBlockingEnabled = true,
@@ -743,6 +745,7 @@ class DownloadSettings {
     chunksPerTask: 16,
     downloadDestination: defaultDownloadDestination,
     searchEngine: SearchEngine.google,
+    searchSuggestionsEnabled: true,
     adblockEnabled: true,
     popupBlockingEnabled: true,
     invisibleRedirectBlockingEnabled: true,
@@ -766,6 +769,7 @@ class DownloadSettings {
     int? chunksPerTask,
     String? downloadDestination,
     SearchEngine? searchEngine,
+    bool? searchSuggestionsEnabled,
     bool? adblockEnabled,
     bool? cloudflareStealthEnabled,
     bool? popupBlockingEnabled,
@@ -863,6 +867,8 @@ class DownloadSettings {
           ? normalizeDownloadDestination(downloadDestination)
           : this.downloadDestination,
       searchEngine: searchEngine ?? this.searchEngine,
+      searchSuggestionsEnabled:
+          searchSuggestionsEnabled ?? this.searchSuggestionsEnabled,
       adblockEnabled: adblockEnabled ?? this.adblockEnabled,
       cloudflareStealthEnabled:
           cloudflareStealthEnabled ?? this.cloudflareStealthEnabled,
@@ -918,6 +924,7 @@ class DownloadSettings {
     'chunksPerTask': chunksPerTask,
     'downloadDestination': downloadDestination,
     'searchEngine': searchEngine.toJson(),
+    'searchSuggestionsEnabled': searchSuggestionsEnabled,
     'adblockEnabled': adblockEnabled,
     'cloudflareStealthEnabled': cloudflareStealthEnabled,
     'popupBlockingEnabled': popupBlockingEnabled,
@@ -1004,6 +1011,8 @@ class DownloadSettings {
               Map<String, dynamic>.from(json['searchEngine'] as Map),
             )
           : defaults.searchEngine,
+      searchSuggestionsEnabled: json['searchSuggestionsEnabled'] as bool? ??
+          defaults.searchSuggestionsEnabled,
       adblockEnabled:
           json['adblockEnabled'] as bool? ?? defaults.adblockEnabled,
       cloudflareStealthEnabled:

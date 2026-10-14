@@ -108,7 +108,8 @@ class _EmptyQueueState extends State<EmptyQueue>
                     if (widget.onPasteLink != null)
                       _ActionChip(
                         icon: Icons.content_paste_rounded,
-                        label: 'Paste link',
+                        label: AppLocalizations.of(context)?.pasteLink ??
+                            'Paste link',
                         onTap: widget.onPasteLink!,
                       ),
                     if (widget.onOpenBrowser != null)

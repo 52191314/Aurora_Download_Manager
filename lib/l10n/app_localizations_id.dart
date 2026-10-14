@@ -1683,4 +1683,70 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get settingsScheduledEmptyHint =>
       'Tambahkan unduhan dan pilih \"Unduh nanti\" untuk menjadwalkannya di sini.';
+
+  @override
+  String get pasteLink => 'Tempel tautan';
+
+  @override
+  String get sortFieldDate => 'Tanggal';
+
+  @override
+  String get sortFieldName => 'Nama';
+
+  @override
+  String get sortFieldSize => 'Ukuran';
+
+  @override
+  String get sortFieldPriority => 'Prioritas';
+
+  @override
+  String get sortFieldState => 'Status';
+
+  @override
+  String get sortFieldSpeed => 'Kecepatan';
+
+  @override
+  String get batteryOptDialogTitle => 'Optimalisasi Baterai';
+
+  @override
+  String get batteryOptDialogContent =>
+      'Aurora Downloader memerlukan izin eksekusi latar belakang untuk memastikan unduhan tidak terputus.\n\nApakah Anda ingin mengecualikan Aurora dari pengoptimalan baterai?';
+
+  @override
+  String get btnNeverAskAgain => 'Jangan tanya lagi';
+
+  @override
+  String get btnLater => 'Nanti';
+
+  @override
+  String get btnOpenSettings => 'Buka pengaturan';
+
+  @override
+  String get linkRefreshNeededTitle => 'Pembaruan Tautan Diperlukan';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return '\"$name\" tidak dapat diselesaikan setelah beberapa kali mencoba.';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly =>
+      'Pengunduhan berulang kali gagal (tautan kedaluwarsa atau pemblokiran jaringan).';
+
+  @override
+  String get linkRefreshPrompt =>
+      'Apakah Anda ingin mencoba penyegaran latar belakang otomatis atau membuka halaman sumber di browser?';
+
+  @override
+  String get btnOpenInBrowser => 'Buka di Browser';
+
+  @override
+  String get btnRefreshAutomatically => 'Segarkan Otomatis';
+
+  @override
+  String get settingsSearchSuggestions => 'Saran penelusuran';
+
+  @override
+  String get settingsSearchSuggestionsDesc =>
+      'Ambil saran dari mesin telusur saat mengetik di bilah alamat';
 }

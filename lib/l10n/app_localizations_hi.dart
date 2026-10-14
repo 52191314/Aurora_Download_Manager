@@ -1688,4 +1688,70 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get settingsScheduledEmptyHint =>
       'एक डाउनलोड जोड़ें और इसे यहाँ शेड्यूल करने के लिए \"बाद में डाउनलोड करें\" चुनें।';
+
+  @override
+  String get pasteLink => 'लिंक पेस्ट करें';
+
+  @override
+  String get sortFieldDate => 'दिनांक';
+
+  @override
+  String get sortFieldName => 'नाम';
+
+  @override
+  String get sortFieldSize => 'आकार';
+
+  @override
+  String get sortFieldPriority => 'प्राथमिकता';
+
+  @override
+  String get sortFieldState => 'स्थिति';
+
+  @override
+  String get sortFieldSpeed => 'गति';
+
+  @override
+  String get batteryOptDialogTitle => 'बैटरी अनुकूलन';
+
+  @override
+  String get batteryOptDialogContent =>
+      'डाउनलोड को निर्बाध रखने के लिए Aurora Downloader को बैकग्राउंड अनुमति चाहिए।\n\nक्या आप Aurora को बैटरी अनुकूलन से बाहर रखना चाहते हैं?';
+
+  @override
+  String get btnNeverAskAgain => 'फिर कभी न पूछें';
+
+  @override
+  String get btnLater => 'बाद में';
+
+  @override
+  String get btnOpenSettings => 'सेटिंग्स खोलें';
+
+  @override
+  String get linkRefreshNeededTitle => 'लिंक रीफ्रेश आवश्यक';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return 'कई प्रयासों के बाद भी \"$name\" पूरा नहीं हो सका।';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly =>
+      'डाउनलोड बार-बार विफल रहा (लिंक समाप्त या नेटवर्क अवरोध)।';
+
+  @override
+  String get linkRefreshPrompt =>
+      'क्या आप पृष्ठभूमि में स्वचालित रीफ्रेश का प्रयास करना चाहते हैं या ब्राउज़र में स्रोत पृष्ठ खोलना चाहते हैं?';
+
+  @override
+  String get btnOpenInBrowser => 'ब्राउज़र में खोलें';
+
+  @override
+  String get btnRefreshAutomatically => 'स्वचालित रूप से रीफ्रेश करें';
+
+  @override
+  String get settingsSearchSuggestions => 'खोज सुझाव';
+
+  @override
+  String get settingsSearchSuggestionsDesc =>
+      'एड्रेस बार में टाइप करते समय खोज इंजन से सुझाव प्राप्त करें';
 }

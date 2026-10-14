@@ -584,5 +584,32 @@
         "type": "String"
       }
     }
+  },
+  "pasteLink": "Paste link",
+  "sortFieldDate": "Date",
+  "sortFieldName": "Name",
+  "sortFieldSize": "Size",
+  "sortFieldPriority": "Priority",
+  "sortFieldState": "State",
+  "sortFieldSpeed": "Speed",
+  "batteryOptDialogTitle": "Battery Optimization",
+  "batteryOptDialogContent": "Aurora Downloader requires background execution permission to ensure uninterrupted downloads.\n\nWould you like to exclude Aurora from battery optimization?",
+  "btnNeverAskAgain": "Never ask again",
+  "btnLater": "Later",
+  "btnOpenSettings": "Open settings",
+  "linkRefreshNeededTitle": "Link Refresh Needed",
+  "linkRefreshNeededDesc": "\"{name}\" could not complete after multiple attempts.",
+  "linkRefreshFailedRepeatedly": "Download failed repeatedly (expired link or network block).",
+  "linkRefreshPrompt": "Would you like to attempt an automatic background refresh or open the source page in the browser?",
+  "btnOpenInBrowser": "Open in Browser",
+  "btnRefreshAutomatically": "Refresh Automatically",
+  "settingsSearchSuggestions": "Search suggestions",
+  "settingsSearchSuggestionsDesc": "Fetch suggestions from search engine while typing in the address bar",
+  "@linkRefreshNeededDesc": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }

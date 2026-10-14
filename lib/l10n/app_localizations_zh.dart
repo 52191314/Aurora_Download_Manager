@@ -1633,4 +1633,67 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsScheduledEmptyHint => '添加下载并选择“稍后下载”，即可在此安排计划。';
+
+  @override
+  String get pasteLink => '粘贴链接';
+
+  @override
+  String get sortFieldDate => '日期';
+
+  @override
+  String get sortFieldName => '名称';
+
+  @override
+  String get sortFieldSize => '大小';
+
+  @override
+  String get sortFieldPriority => '优先级';
+
+  @override
+  String get sortFieldState => '状态';
+
+  @override
+  String get sortFieldSpeed => '速度';
+
+  @override
+  String get batteryOptDialogTitle => '电池优化';
+
+  @override
+  String get batteryOptDialogContent =>
+      'Aurora Downloader 需要后台运行权限以确保下载不中断。\n\n是否将 Aurora 排除在电池优化之外？';
+
+  @override
+  String get btnNeverAskAgain => '不再询问';
+
+  @override
+  String get btnLater => '稍后';
+
+  @override
+  String get btnOpenSettings => '打开设置';
+
+  @override
+  String get linkRefreshNeededTitle => '需要刷新链接';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return '经过多次尝试仍无法完成“$name”。';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly => '下载多次失败（链接已过期或网络受阻）。';
+
+  @override
+  String get linkRefreshPrompt => '您要尝试在后台自动刷新，还是在浏览器中打开源页面？';
+
+  @override
+  String get btnOpenInBrowser => '在浏览器中打开';
+
+  @override
+  String get btnRefreshAutomatically => '自动刷新';
+
+  @override
+  String get settingsSearchSuggestions => '搜索建议';
+
+  @override
+  String get settingsSearchSuggestionsDesc => '在地址栏中输入时从搜索引擎获取联想建议';
 }

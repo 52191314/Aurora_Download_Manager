@@ -1698,4 +1698,70 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get settingsScheduledEmptyHint =>
       'Ajoutez un téléchargement et choisissez « Télécharger plus tard » pour le planifier ici.';
+
+  @override
+  String get pasteLink => 'Coller le lien';
+
+  @override
+  String get sortFieldDate => 'Date';
+
+  @override
+  String get sortFieldName => 'Nom';
+
+  @override
+  String get sortFieldSize => 'Taille';
+
+  @override
+  String get sortFieldPriority => 'Priorité';
+
+  @override
+  String get sortFieldState => 'État';
+
+  @override
+  String get sortFieldSpeed => 'Vitesse';
+
+  @override
+  String get batteryOptDialogTitle => 'Optimisation de la batterie';
+
+  @override
+  String get batteryOptDialogContent =>
+      'Aurora Downloader nécessite l\'autorisation d\'exécution en arrière-plan pour garantir des téléchargements ininterrompus.\n\nSouhaitez-vous exclure Aurora de l\'optimisation de la batterie ?';
+
+  @override
+  String get btnNeverAskAgain => 'Ne plus demander';
+
+  @override
+  String get btnLater => 'Plus tard';
+
+  @override
+  String get btnOpenSettings => 'Ouvrir les paramètres';
+
+  @override
+  String get linkRefreshNeededTitle => 'Actualisation du lien requise';
+
+  @override
+  String linkRefreshNeededDesc(String name) {
+    return '« $name » n\'a pas pu se terminer après plusieurs tentatives.';
+  }
+
+  @override
+  String get linkRefreshFailedRepeatedly =>
+      'Le téléchargement a échoué à plusieurs reprises (lien expiré ou blocage réseau).';
+
+  @override
+  String get linkRefreshPrompt =>
+      'Souhaitez-vous tenter une actualisation automatique en arrière-plan ou ouvrir la page source dans le navigateur ?';
+
+  @override
+  String get btnOpenInBrowser => 'Ouvrir dans le navigateur';
+
+  @override
+  String get btnRefreshAutomatically => 'Actualiser automatiquement';
+
+  @override
+  String get settingsSearchSuggestions => 'Suggestions de recherche';
+
+  @override
+  String get settingsSearchSuggestionsDesc =>
+      'Obtenir des suggestions du moteur de recherche lors de la saisie dans la barre d\'adresse';
 }

@@ -950,6 +950,19 @@ class _SettingsPageState extends State<SettingsPage> {
                       searchEngine: SearchEngine(
                           id: 'custom', name: 'Custom', templateUrl: v)))),
             ],
+            const Divider(height: 24),
+            SwitchListTile(
+              title: Text(l?.settingsSearchSuggestions ?? 'Search suggestions'),
+              subtitle: Text(
+                l?.settingsSearchSuggestionsDesc ??
+                    'Fetch suggestions from search engine while typing in the address bar',
+                style: TextStyle(fontSize: 12, color: context.ac.textSecondary),
+              ),
+              value: _settings.searchSuggestionsEnabled,
+              onChanged: (enabled) =>
+                  _update(_settings.copyWith(searchSuggestionsEnabled: enabled)),
+              contentPadding: EdgeInsets.zero,
+            ),
             ])),
           ],
         ),
