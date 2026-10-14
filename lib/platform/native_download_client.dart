@@ -29,6 +29,9 @@ class NativeChunkResult {
 /// Usage: call [downloadChunk] for each chunk.  If it returns null
 /// (native engine unavailable or failed), fall back to Dart's HTTP client.
 class NativeDownloadClient {
+  @visibleForTesting
+  static bool debugAssumeAndroid = false;
+
   static const MethodChannel _channel = MethodChannel(
     'aurora_downloader/native_download',
   );
@@ -85,7 +88,7 @@ class NativeDownloadClient {
     String? cookieHeader,
     String? downloadId,
   }) async {
-    if (!Platform.isAndroid) return null;
+    if (!Platform.isAndroid && !debugAssumeAndroid) return null;
 
     String rangeHeader = '';
     if (rangeEnd >= rangeStart) {
