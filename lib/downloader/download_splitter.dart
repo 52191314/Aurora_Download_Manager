@@ -999,7 +999,7 @@ class DownloadSplitter implements BaseDownloader {
     }
 
     final bool rangeSupported = task.chunks.length > 1;
-    final int rangeStart = chunk.start + diskBytes;
+    int rangeStart = chunk.start + diskBytes;
     final int rangeEnd = chunk.end;
 
     if (!rangeSupported && diskBytes > 0) {
@@ -1102,11 +1102,15 @@ class DownloadSplitter implements BaseDownloader {
             diskBytes = actualBytes;
             chunk.bytesDownloaded = actualBytes;
             _progressDirty = true;
-            if (!chunk.isOpenEnded && actualBytes >= chunk.size) {
+            if (chunk.isOpenEnded) {
               chunk.isCompleted = true;
+              return; // Unknown-length download completed via native path.
+            } else if (actualBytes >= chunk.size) {
+              chunk.isCompleted = true;
+              return; // Native path handled this chunk completely.
             }
           }
-          return; // Native path handled this chunk.
+          // If native path completed short of chunk size, fall through to Dart HTTP fallback.
         }
         // Native path returned no data or non-2xx — fall through to Dart.
         _logError(
@@ -1134,6 +1138,7 @@ class DownloadSplitter implements BaseDownloader {
     if (await chunkFile.exists()) {
       diskBytes = await chunkFile.length();
       chunk.bytesDownloaded = diskBytes;
+      rangeStart = chunk.start + diskBytes;
     }
 
     // Fallback: Dart HTTP client (with 429/403/401 retry).
@@ -1500,10 +1505,16 @@ class DownloadSplitter implements BaseDownloader {
             if (!(currentDiskBytes == 0 && chunk.end == -1)) {
               chunk.isCompleted = true;
             }
+            return; // ── Success ──
+          } else {
+            // Premature stream close: server closed connection early without error.
+            throw SocketException(
+              'Server closed connection before chunk ${chunk.index} was complete '
+              '($currentDiskBytes/${chunk.size} bytes received)',
+            );
           }
         }
-
-        return; // ── Success ──
+        return;
       } on TimeoutException {
         shouldRetry = true;
         if (reconnectAttempt >= _maxReconnectsPerChunk ||
@@ -1574,6 +1585,9 @@ class DownloadSplitter implements BaseDownloader {
         currentRangeStart = chunk.start + currentDiskBytes;
         reconnectRequest.headers['Range'] =
             'bytes=$currentRangeStart-${chunk.end}';
+      } else if (currentDiskBytes > 0) {
+        currentRangeStart = chunk.start + currentDiskBytes;
+        reconnectRequest.headers['Range'] = 'bytes=$currentDiskBytes-';
       }
       currentResponse = await client
           .send(reconnectRequest)
@@ -1592,6 +1606,15 @@ class DownloadSplitter implements BaseDownloader {
             'Reconnect: server returned ${currentResponse.statusCode} '
             'instead of 206 for chunk ${chunk.index}. Cannot resume.',
           );
+        }
+        if (currentResponse.statusCode == 200 && currentDiskBytes > 0) {
+          // Server ignored Range header and sent full file from byte 0.
+          // Truncate to restart cleanly and avoid corrupting data by appending.
+          await chunkFile.writeAsBytes([]);
+          task.downloadedBytes -= currentDiskBytes;
+          currentDiskBytes = 0;
+          chunk.bytesDownloaded = 0;
+          _progressDirty = true;
         }
         // Continue the loop to write this new response.
       } else {
