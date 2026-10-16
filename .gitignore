@@ -207,3 +207,6 @@ QODER.md
 sqlite_mcp_server.db
 .github/code-review-graph.instruction.md
 
+
+# Local Ghidra/pyghidra-mcp analysis state (generated; separate workspace at E:\02_Projects\pyghidra_mcp_projects)
+pyghidra_mcp_projects/
