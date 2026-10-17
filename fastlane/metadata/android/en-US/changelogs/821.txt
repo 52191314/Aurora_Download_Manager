@@ -1,0 +1,5 @@
+Aurora Download Manager 1.3.3:
+- Add setting to toggle search suggestions in address bar.
+- Disclose all tracker and filter list endpoints in F-Droid metadata.
+- Fix German localization typo and untranslated dialog strings.
+- Upstream metadata and Fastlane screenshots aligned for F-Droid.
